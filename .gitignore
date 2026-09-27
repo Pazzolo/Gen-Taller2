@@ -1,0 +1,17 @@
+# Credenciales: ninguna clave va al repositorio (política de credenciales del curso)
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Qdrant persistente y artefactos intermedios
+qdrant_storage/
+data/
+
+# macOS y el zip original del andamiaje
+.DS_Store
+__MACOSX/
+*.zip
