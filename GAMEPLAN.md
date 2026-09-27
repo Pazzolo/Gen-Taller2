@@ -4,7 +4,7 @@ The rule for the whole taller is **baseline → measure → extend → measure**
 
 ## Step 0: Set up (≈30 min)
 
-1. ✅ **The scaffold is in `Lab-02-RAG-VectorSearch/`.** Run every command from that folder: `corpus/`, `.env`, `golden_set.json` and `resultados.csv` all live there.
+1. ✅ **The scaffold is in the repo root.** Run every command from the root: `corpus/`, `.env`, `golden_set.json` and `resultados.csv` all live there.
 2. ✅ **`.gitignore` is in place.** It covers `.env`, `__pycache__/`, `qdrant_storage/`, `*.zip` and `data/`, because a committed API key is a blocking finding.
 3. **Install dependencies.** Create a venv and run `pip install -r requirements.txt`. You'll also need `transformers` for the bge-m3 tokenizer. At the end, run `pip freeze > requirements.txt` so the file has exact versions, which is graded.
 4. **Configure keys.** `cp .env.example .env`, then add the OpenAI key.
