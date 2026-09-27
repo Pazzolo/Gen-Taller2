@@ -2,6 +2,20 @@
 
 The rule for the whole taller is **baseline → measure → extend → measure**.
 
+## Workflow: one branch and one pull request per step
+
+Each step gets its own branch, created from `main` after the previous step's pull request is merged. Paolo reviews and merges every pull request.
+
+| Branch | Contents | Status |
+|---|---|---|
+| `step-0-setup` | `.gitignore`, scaffold, gameplan, pinned `requirements.txt` | Open, waiting on push (the pin is blocked by disk space) |
+| `step-1-corpus` | `corpus/` plus the page and text-layer check | Not started |
+| `step-2-part0` | Part 0: the three silent failures, scripts and raw output | Not started |
+| `step-3-baseline` | Part 1: the baseline RAG | Not started |
+| `step-4-evaluation` | Part 2: golden set, metrics, `resultados.csv`, worst cases | Not started |
+| `step-5-extension` | Part 3: the extension and its measurement | Not started |
+| `step-6-report` | Part 4: reflection and the PDF report | Not started |
+
 ## Step 0: Set up (≈30 min)
 
 1. ✅ **The scaffold is in the repo root.** Run every command from the root: `corpus/`, `.env`, `golden_set.json` and `resultados.csv` all live there.
