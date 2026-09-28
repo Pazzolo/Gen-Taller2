@@ -1,0 +1,8 @@
+aviso de la ingesta:
+  AVISO ingesta: chunk_tokens=900 supera el tope del modelo (128 tokens): lo que pase de 126 tokens no llega al índice —el MiniLM lo trunca en silencio; la H200 rechaza la petición—.
+
+texto: salidas/parte0b_texto.txt (900 palabras)
+tokens del texto (tokenizador del modelo, sin especiales): 1463
+tope del modelo (max_seq_length): 128
+fracción que llega al vector: 8.6% (126 tokens de contenido + 2 especiales)
+coseno(vector del texto entero, vector del texto recortado a 128): 1.000000
