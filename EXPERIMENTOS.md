@@ -37,6 +37,10 @@ it empty forces generation through Ollama.
 | 2026-09-27T23:19:56 | 1.3-1.5 índice + top-5 | bge-m3@ollama-local | embed_local_multilingue | BAAI/bge-m3 | ollama-local | ollama:qwen3:1.7b | 512 | 102 | 948 | 479701 | 0.0000 | 136.6 |  |  |  |  |  | salidas/bge-m3@ollama-local/parte1_top5.txt |  |
 | 2026-09-27T23:38:11 | 2.b evaluación | bge-m3@ollama-local | embed_local_multilingue | BAAI/bge-m3 | ollama-local | ollama:qwen3:1.7b |  |  |  |  |  |  | 3 | 0.875 | 0.750 | 1.000 | 0.250 | salidas/bge-m3@ollama-local/resultados_k3.csv | golden_set.json · 8 respondibles, 2 negativas |
 | 2026-09-27T23:39:56 | 2.b evaluación | bge-m3@ollama-local | embed_local_multilingue | BAAI/bge-m3 | ollama-local | ollama:qwen3:1.7b |  |  |  |  |  |  | 5 | 1.000 | 0.781 | 1.000 | 0.125 | salidas/bge-m3@ollama-local/resultados_k5.csv | golden_set.json · 8 respondibles, 2 negativas |
+| 2026-09-27T23:46:57 | 3.B bm25 | bge-m3@ollama-local | embed_local_multilingue | BAAI/bge-m3 | ollama-local |  | 512 | 102 |  |  |  |  | 3 | 0.875 | 0.750 | sin medir | sin medir | salidas/bge-m3@ollama-local/bm25/resultados_k3.csv | BM25 solo, diagnóstico · sin generar |
+| 2026-09-27T23:46:57 | 3.B bm25 | bge-m3@ollama-local | embed_local_multilingue | BAAI/bge-m3 | ollama-local |  | 512 | 102 |  |  |  |  | 5 | 0.875 | 0.750 | sin medir | sin medir | salidas/bge-m3@ollama-local/bm25/resultados_k5.csv | BM25 solo, diagnóstico · sin generar |
+| 2026-09-27T23:48:23 | 3.B hibrido | bge-m3@ollama-local | embed_local_multilingue | BAAI/bge-m3 | ollama-local | ollama:qwen3:1.7b | 512 | 102 |  |  |  |  | 3 | 1.000 | 0.854 | 1.000 | 0.125 | salidas/bge-m3@ollama-local/hibrido/resultados_k3.csv | 20 candidatos por lado, RRF k=60 |
+| 2026-09-27T23:49:37 | 3.B hibrido | bge-m3@ollama-local | embed_local_multilingue | BAAI/bge-m3 | ollama-local | ollama:qwen3:1.7b | 512 | 102 |  |  |  |  | 5 | 1.000 | 0.854 | 1.000 | 0.000 | salidas/bge-m3@ollama-local/hibrido/resultados_k5.csv | 20 candidatos por lado, RRF k=60 |
 <!-- tabla:fin -->
 
 ## Journal
