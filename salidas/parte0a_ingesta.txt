@@ -1,0 +1,25 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+AVISO ingesta: instructivo_escaneado.pdf: 0 caracteres útiles en 2 página(s). ¿Escaneado o fotografiado? NO se indexa: sin texto no hay nada que recuperar (OCR aparte).
+embeddings: local · sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 · tope 128 tokens · Qdrant :memory:
+ingesta: nimbus_gastos.md: 1 página(s), 294 caracteres útiles → 1 fragmento(s)
+ingesta: nimbus_remoto.md: 1 página(s), 296 caracteres útiles → 1 fragmento(s)
+ingesta: nimbus_vacaciones.md: 1 página(s), 363 caracteres útiles → 1 fragmento(s)
+indexados 3 fragmentos de 3 documento(s)
+  0.681  nimbus_vacaciones.md / nimbus_vacaciones-0000  # Política de vacaciones de NimbusSoft Los empleados a tiempo completo acumulan …
+  0.502  nimbus_remoto.md / nimbus_remoto-0000  # Política de trabajo remoto de NimbusSoft El trabajo remoto está permitido hast…
+  0.485  nimbus_gastos.md / nimbus_gastos-0000  # Política de reembolso de gastos de NimbusSoft Los gastos de viaje se reembolsa…
+
+[modo inspección (sin clave ni Ollama)] abstuvo=None
+[modo inspección: no hay clave de API ni Ollama; este es el prompt]
+Responde usando solo el contexto recuperado.
+Si el contexto no contiene la respuesta, di exactamente: "El corpus no contiene información suficiente."
+
+Contexto:
+[1] nimbus_vacaciones.md / nimbus_vacaciones-0000
+# Política de vacaciones de NimbusSoft Los empleados a tiempo completo acumulan 1.5 días de vacaciones por mes trabajado, hasta un máximo de 18 días por año. Las vacaciones deben solicitarse con al menos 15 días de anticipación a través del portal interno. Los días no utilizados pueden transferirse al año siguiente hasta un máximo de 5 días. Durante el primer año, los días solo pueden tomarse después de superar el período de prueba de 3 meses.
+
+[2] nimbus_remoto.md / nimbus_remoto-0000
+# Política de trabajo remoto de NimbusSoft El trabajo remoto está permitido hasta 3 días por semana para todos los roles excepto soporte de infraestructura on-site. Los días remotos se coordinan con el líder de equipo. Para trabajar desde el exterior del país se requiere aprobación de Recursos Humanos con 30 días de anticipación y un máximo de 60 días por año.
+
+[3] nimbus_gastos.md / nimbus_gastos-0000
+# Política de reembolso 

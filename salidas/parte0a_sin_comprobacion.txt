@@ -1,0 +1,4 @@
+documento: instructivo_escaneado.pdf · 2 página(s) · useful_chars=0 · parece_escaneado=True
+texto extraído por pypdf (repr): '\n[page=1]\n\n\n[page=2]\n'
+fragmentos que produciría la fragmentación sin la comprobación: 1
+  [0] '[page=1] [page=2]' · caracteres útiles=0 (el filtro por fragmento exige 20)
