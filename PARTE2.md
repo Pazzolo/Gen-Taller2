@@ -10,7 +10,7 @@ export H200_EMBED_URL=http://localhost:11434 EMBEDDING_BACKEND=h200 OPENAI_API_K
 python verificar_golden.py                    # 2.a: el golden set contra los fragmentos reales
 python evaluation.py --k 3 --sin-indexar      # 2.b (reusa el índice de la Parte 1)
 python evaluation.py --k 5 --sin-indexar
-python tabla_metricas.py                      # tabla desde los CSV + resultados.csv
+python tabla_metricas.py --entregable         # tabla desde los CSV + ./resultados.csv
 python analisis_fallos.py                     # 2.c: evidencia de los peores casos
 ```
 
