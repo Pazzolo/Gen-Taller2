@@ -5,9 +5,9 @@ Usa el tokenizador y el tope del codificador que elige `EMBEDDING_BACKEND` —el
 que `rag_pipeline.py` fragmenta— y la misma `load_corpus` del andamiaje, así que los
 fragmentos son los que se van a indexar. No llama a ninguna API: solo tokeniza.
 
-    EMBEDDING_BACKEND=openai python inspeccion_ingesta.py [chunk_tokens] [overlap_tokens]   # 512 102
+    python inspeccion_ingesta.py [chunk_tokens] [overlap_tokens]   # por defecto 512 102
 
-Escribe `salidas/parte1_ingesta.txt`.
+Escribe `salidas/<etiqueta>/parte1_ingesta.txt` y una fila en `experimentos.csv`.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ import re
 import statistics
 import sys
 
+import experimentos
 from ingestion import load_corpus, read_document
 from rag_pipeline import EMBEDDING_BACKEND, EMBEDDING_MODEL, crear_codificador
 
@@ -40,7 +41,7 @@ def lineas_repetidas(paginas: list[str], minimo: float = 0.3) -> list[str]:
     return [l for l, n in cuenta.most_common() if n >= umbral]
 
 
-def main(chunk_tokens: int, overlap_tokens: int) -> str:
+def main(chunk_tokens: int, overlap_tokens: int) -> tuple[str, dict]:
     logging.disable(logging.WARNING)
     codificador = crear_codificador()
     tok, tope = codificador.tokenizer, codificador.max_seq_tokens
@@ -89,12 +90,16 @@ def main(chunk_tokens: int, overlap_tokens: int) -> str:
                f"(mediana {statistics.median(largos):.0f})",
                f"bibliografía + apéndices: {refs_total / tokens_total:.1%} de los tokens del corpus "
                f"(desde el último encabezado References/Bibliography hasta el final; incluye los apéndices)"]
-    return "\n".join(lineas) + "\n"
+    return "\n".join(lineas) + "\n", {"n_fragmentos": len(chunks), "tokens_indexados": sum(largos)}
 
 
 if __name__ == "__main__":
     args = [int(a) for a in sys.argv[1:3]]
-    salida = main(*(args or [512, 102]))
+    chunk_tokens, overlap_tokens = args or [512, 102]
+    salida, cifras = main(chunk_tokens, overlap_tokens)
     print(salida)
-    Path("salidas").mkdir(exist_ok=True)
-    Path("salidas/parte1_ingesta.txt").write_text(salida, encoding="utf-8")
+    ruta = experimentos.carpeta() / "parte1_ingesta.txt"
+    ruta.write_text(salida, encoding="utf-8")
+    experimentos.registrar("1.1-1.2 inspección", chunk_tokens=chunk_tokens,
+                           overlap_tokens=overlap_tokens, salida=str(ruta),
+                           nota="solo tokeniza, sin llamar al modelo", **cifras)
