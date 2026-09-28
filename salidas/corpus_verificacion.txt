@@ -1,0 +1,20 @@
+páginas  caracteres  vacías  documento
+     34       94294       0  bai-2022-constitutional-ai.pdf
+     30       59953       0  blei-2003-lda.pdf
+     75      186342       0  brown-2020-gpt3.pdf
+     23       36740       0  doersch-2016-tutorial-vae.pdf
+     26       70385       0  edge-2024-graphrag.pdf
+      8       25583       0  es-2023-ragas.pdf
+     21       86641       0  gao-2023-rag-survey.pdf
+     14       31786       0  kingma-2013-vae.pdf
+     19       55094       0  lewis-2020-rag.pdf
+      8       18996       0  ng-jordan-2001-discriminative-vs-generative.pdf
+     68      143167       0  ouyang-2022-instructgpt.pdf
+     27       71700       0  rafailov-2023-dpo.pdf
+     18       57304       0  rag-anything-2025.pdf
+     11       35133       0  reimers-2019-sentence-bert.pdf
+     15       31566       0  vaswani-2017-attention-is-all-you-need.pdf
+     43      105503       0  wei-2022-chain-of-thought.pdf
+
+documentos indexables: 16 (mínimo 5) · páginas: 440 (mínimo 50)
+cumple los requisitos del enunciado
