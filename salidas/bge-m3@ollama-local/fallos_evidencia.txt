@@ -1,0 +1,54 @@
+===== caso 6 (multi-chunk) · k=5 · posición=1 · hit=True · abstuvo=True
+pregunta: InstructGPT and DPO both learn from human comparisons between outputs. How do they differ in the optimization step that follows?
+fuente: ['ouyang-2022-instructgpt.pdf', 'rafailov-2023-dpo.pdf'] · frase esperada: ''
+ingesta:
+  ingesta: ouyang-2022-instructgpt.pdf: 68 página(s), 143167 caracteres útiles → 118 fragmento(s)
+  ingesta: rafailov-2023-dpo.pdf: 27 página(s), 71700 caracteres útiles → 66 fragmento(s)
+recuperados:
+  1. 0.660  rafailov-2023-dpo-0025  contiene: ['reinforcement learning', 'PPO']
+  2. 0.658  rafailov-2023-dpo-0003  contiene: ['reward model', 'PPO', 'binary cross entropy', 'change of variables']
+  3. 0.657  rafailov-2023-dpo-0019  contiene: ['reward model', 'PPO']
+  4. 0.651  rafailov-2023-dpo-0021  contiene: ['PPO']
+  5. 0.650  ouyang-2022-instructgpt-0006  contiene: —
+respuesta:
+  El corpus no contiene información suficiente.
+
+===== caso 5 (multi-chunk) · k=3 · posición=1 · hit=True · abstuvo=True
+pregunta: Lewis et al.'s RAG and the RAGAS framework both deal with retrieval-augmented generation. Which one proposes a model and which one proposes a way to evaluate it, and what does each rely on?
+fuente: ['lewis-2020-rag.pdf', 'es-2023-ragas.pdf'] · frase esperada: ''
+ingesta:
+  ingesta: es-2023-ragas.pdf: 8 página(s), 25583 caracteres útiles → 21 fragmento(s)
+  ingesta: lewis-2020-rag.pdf: 19 página(s), 55094 caracteres útiles → 47 fragmento(s)
+recuperados:
+  1. 0.741  es-2023-ragas-0002  contiene: ['faithfulness']
+  2. 0.730  es-2023-ragas-0000  contiene: —
+  3. 0.704  es-2023-ragas-0001  contiene: —
+respuesta:
+  El corpus no contiene información suficiente.
+
+===== caso 3 (simple) · k=3 · posición=— · hit=False · abstuvo=False
+pregunta: Which community detection method does GraphRAG use to split its entity graph into groups?
+fuente: ['edge-2024-graphrag.pdf'] · frase esperada: 'Community detection (e.g., Leiden'
+ingesta:
+  ingesta: edge-2024-graphrag.pdf: 26 página(s), 70385 caracteres útiles → 60 fragmento(s)
+recuperados:
+  1. 0.685  edge-2024-graphrag-0011  contiene: ['Leiden']
+  2. 0.609  edge-2024-graphrag-0005  contiene: —
+  3. 0.598  edge-2024-graphrag-0002  contiene: —
+respuesta:
+  La comunidad detectada que GraphRAG utiliza para dividir su grafo de entidades es el algoritmo de detección de comunidades **Leiden** (Traag et al., 2019), aplicado de manera hierárquica para detectar subcomunidades dentro de cada comunidad detectada hasta llegar a comunidades hoja que no pueden ser divididas más. Respuesta: Leiden.
+
+===== caso 4 (simple) · k=5 · posición=2 · hit=True · abstuvo=False
+pregunta: At roughly what model size does chain-of-thought prompting start to improve performance?
+fuente: ['wei-2022-chain-of-thought.pdf'] · frase esperada: 'only yields performance gains when used with models of'
+ingesta:
+  ingesta: wei-2022-chain-of-thought.pdf: 43 página(s), 105503 caracteres útiles → 90 fragmento(s)
+recuperados:
+  1. 0.735  wei-2022-chain-of-thought-0043  contiene: ['540B']
+  2. 0.734  wei-2022-chain-of-thought-0009  contiene: ['100B', 'only yields performance gains when used with models of', '540B']
+  3. 0.731  wei-2022-chain-of-thought-0010  contiene: ['540B']
+  4. 0.722  wei-2022-chain-of-thought-0042  contiene: —
+  5. 0.719  wei-2022-chain-of-thought-0019  contiene: —
+respuesta:
+  El corpus menciona que el beneficio de la promoción de pensamiento secuencial es más grande para el modelo PaLM 540B en GSM8K, que cumple con los tres condiciones (tarea desafiante, modelo grande y curva de escalado relativamente plana). Esto sugiere que el inicio de los beneficios se observa en modelos de tamaño similar a 540B parámetros. **Respuesta:** 540B parámetros.
+

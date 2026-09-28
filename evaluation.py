@@ -26,6 +26,15 @@ Qué mide, y por qué así:
    `ids_sin_rellenar`, y la función lo imprime.
 5. **Escribe `resultados.csv`** con una fila por consulta: es el entregable crudo del que se
    derivan todas las tablas del informe.
+
+Cambios del taller sobre el andamiaje (Parte 2), declarados:
+- el CSV va por defecto a `salidas/<etiqueta>/resultados_k<k>.csv`, para que la corrida con
+  k = 3 no pise la de k = 5 ni una configuración pise a otra (`tabla_metricas.py` las junta en
+  `resultados.csv`);
+- el CSV añade `pregunta`, `respuesta` (entera), `retrieved_docs` y `retrieved_scores`: son la
+  evidencia del análisis de fallos (2.c);
+- cada corrida añade una fila con sus métricas a `experimentos.csv`.
+Las métricas y su definición no cambian.
 """
 
 from __future__ import annotations
@@ -93,6 +102,9 @@ def evaluate_retrieval(golden_set: list[dict], pipeline: RagPipeline, k: int = 5
             "posicion": pos,
             "score_top1": hits[0]["score"] if hits else None,
             "retrieved_ids": [h["chunk_id"] for h in hits],
+            "retrieved_docs": [h["document"] for h in hits],
+            "retrieved_scores": [round(h["score"], 4) for h in hits],
+            "pregunta": pregunta,
             "abstuvo": None,
             "generador": None,
         }
@@ -100,7 +112,7 @@ def evaluate_retrieval(golden_set: list[dict], pipeline: RagPipeline, k: int = 5
             salida = pipeline.answer(pregunta, top_k=k)
             fila["abstuvo"] = salida["abstained"]
             fila["generador"] = salida["generator"]
-            fila["respuesta"] = salida["answer"][:500]
+            fila["respuesta"] = salida["answer"]
         rows.append(fila)
 
     respondibles = [r for r in rows if r["respondible"]]
@@ -138,13 +150,18 @@ def evaluate_retrieval(golden_set: list[dict], pipeline: RagPipeline, k: int = 5
 def escribir_csv(rows: list[dict], path: Path, modelo_embeddings: str) -> None:
     """Una fila por consulta: el crudo del que se derivan las tablas del informe."""
     columnas = ["id", "tipo", "respondible", "modelo_embeddings", "k", "posicion", "hit",
-                "reciprocal_rank", "score_top1", "abstuvo", "generador", "retrieved_ids"]
+                "reciprocal_rank", "score_top1", "abstuvo", "generador", "retrieved_ids",
+                "retrieved_docs", "retrieved_scores", "pregunta", "respuesta"]
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=columnas)
         w.writeheader()
         for r in rows:
             w.writerow({c: (r.get(c) if c != "modelo_embeddings" else modelo_embeddings)
-                        for c in columnas} | {"retrieved_ids": " ".join(r["retrieved_ids"])})
+                        for c in columnas}
+                       | {"retrieved_ids": " ".join(r["retrieved_ids"]),
+                          "retrieved_docs": " ".join(r["retrieved_docs"]),
+                          "retrieved_scores": " ".join(map(str, r["retrieved_scores"]))})
 
 
 def _fmt(x) -> str:
@@ -156,14 +173,17 @@ if __name__ == "__main__":
     ap.add_argument("--golden", type=Path, default=Path("golden_set.json"))
     ap.add_argument("--corpus", type=Path, default=Path("corpus"))
     ap.add_argument("--k", type=int, default=5)
-    ap.add_argument("--csv", type=Path, default=Path("resultados.csv"))
+    ap.add_argument("--csv", type=Path, default=None,
+                    help="por defecto salidas/<etiqueta>/resultados_k<k>.csv")
     ap.add_argument("--sin-generar", action="store_true",
                     help="solo recuperación: no llama a ningún LLM y no mide abstención")
     ap.add_argument("--sin-indexar", action="store_true",
                     help="usa la colección ya indexada en Qdrant (no sirve con :memory:)")
     args = ap.parse_args()
 
+    import experimentos
     from rag_pipeline import EMBEDDING_MODEL
+    args.csv = args.csv or experimentos.carpeta() / f"resultados_k{args.k}.csv"
     pipeline = RagPipeline()
     if not args.sin_indexar:
         chunks = pipeline.ingest(args.corpus)
@@ -183,3 +203,11 @@ if __name__ == "__main__":
     for tipo, m in report["por_tipo"].items():
         print(f"  {tipo:<12} n={m['n']}  hit={_fmt(m['hit_rate'])}  mrr={_fmt(m['mrr'])}  abstuvo={_fmt(m['abstuvo'])}")
     print(f"filas crudas en {args.csv}")
+    generadores = sorted({r["generador"] for r in report["rows"] if r["generador"]})
+    experimentos.registrar(
+        "2.b evaluación", k=args.k, generador=" ".join(generadores),
+        hit_rate=_fmt(report["hit_rate"]), mrr=_fmt(report["mrr"]),
+        abstencion_correcta=_fmt(report["abstencion_correcta"]),
+        abstencion_indebida=_fmt(report["abstencion_indebida"]), salida=str(args.csv),
+        nota=f"{args.golden} · {report['n_respondibles']} respondibles, {report['n_negativas']} negativas"
+             + (" · sin generar" if args.sin_generar else ""))

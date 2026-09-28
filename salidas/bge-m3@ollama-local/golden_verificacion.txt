@@ -1,0 +1,14 @@
+10 preguntas: adversarial=1, multi-chunk=3, negativo=2, simple=4 · respondibles=8 · 948 fragmentos
+
+[ 1] simple      frase en 4 fragmento(s) · solape pregunta/frase 0/2 []
+[ 2] simple      frase en 1 fragmento(s) · solape pregunta/frase 1/5 ['variational']
+[ 3] simple      frase en 2 fragmento(s) · solape pregunta/frase 2/5 ['community', 'detection']
+[ 4] simple      frase en 1 fragmento(s) · solape pregunta/frase 1/7 ['performance']
+[ 5] multi-chunk sin frase: acierto a nivel de documento
+[ 6] multi-chunk sin frase: acierto a nivel de documento
+[ 7] multi-chunk sin frase: acierto a nivel de documento
+[ 8] negativo    sin fuente: cuenta como negativa (solo abstención)
+[ 9] negativo    sin fuente: cuenta como negativa (solo abstención)
+[10] adversarial frase en 1 fragmento(s) · solape pregunta/frase 2/4 ['rate', 'use']
+
+sin problemas

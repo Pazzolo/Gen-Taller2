@@ -30,11 +30,13 @@ it empty forces generation through Ollama.
 ## Runs
 
 <!-- tabla:inicio -->
-| fecha | etapa | etiqueta | fila_embeddings | modelo_embeddings | host_embeddings | generador | chunk_tokens | overlap_tokens | n_fragmentos | tokens_indexados | costo_usd | segundos | salida | nota |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2026-09-27T23:15:46 | 1.1-1.2 inspección | text-embedding-3-small@api-openai | embed_api_economico | text-embedding-3-small | api-openai |  | 512 | 102 | 930 | 473866 |  |  | salidas/text-embedding-3-small@api-openai/parte1_ingesta.txt | solo tokeniza, sin llamar al modelo |
-| 2026-09-27T23:16:26 | 1.1-1.2 inspección | bge-m3@ollama-local | embed_local_multilingue | BAAI/bge-m3 | ollama-local |  | 512 | 102 | 948 | 479701 |  |  | salidas/bge-m3@ollama-local/parte1_ingesta.txt | solo tokeniza, sin llamar al modelo |
-| 2026-09-27T23:19:56 | 1.3-1.5 índice + top-5 | bge-m3@ollama-local | embed_local_multilingue | BAAI/bge-m3 | ollama-local | ollama:qwen3:1.7b | 512 | 102 | 948 | 479701 | 0.0000 | 136.6 | salidas/bge-m3@ollama-local/parte1_top5.txt |  |
+| fecha | etapa | etiqueta | fila_embeddings | modelo_embeddings | host_embeddings | generador | chunk_tokens | overlap_tokens | n_fragmentos | tokens_indexados | costo_usd | segundos | k | hit_rate | mrr | abstencion_correcta | abstencion_indebida | salida | nota |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-09-27T23:15:46 | 1.1-1.2 inspección | text-embedding-3-small@api-openai | embed_api_economico | text-embedding-3-small | api-openai |  | 512 | 102 | 930 | 473866 |  |  |  |  |  |  |  | salidas/text-embedding-3-small@api-openai/parte1_ingesta.txt | solo tokeniza, sin llamar al modelo |
+| 2026-09-27T23:16:26 | 1.1-1.2 inspección | bge-m3@ollama-local | embed_local_multilingue | BAAI/bge-m3 | ollama-local |  | 512 | 102 | 948 | 479701 |  |  |  |  |  |  |  | salidas/bge-m3@ollama-local/parte1_ingesta.txt | solo tokeniza, sin llamar al modelo |
+| 2026-09-27T23:19:56 | 1.3-1.5 índice + top-5 | bge-m3@ollama-local | embed_local_multilingue | BAAI/bge-m3 | ollama-local | ollama:qwen3:1.7b | 512 | 102 | 948 | 479701 | 0.0000 | 136.6 |  |  |  |  |  | salidas/bge-m3@ollama-local/parte1_top5.txt |  |
+| 2026-09-27T23:38:11 | 2.b evaluación | bge-m3@ollama-local | embed_local_multilingue | BAAI/bge-m3 | ollama-local | ollama:qwen3:1.7b |  |  |  |  |  |  | 3 | 0.875 | 0.750 | 1.000 | 0.250 | salidas/bge-m3@ollama-local/resultados_k3.csv | golden_set.json · 8 respondibles, 2 negativas |
+| 2026-09-27T23:39:56 | 2.b evaluación | bge-m3@ollama-local | embed_local_multilingue | BAAI/bge-m3 | ollama-local | ollama:qwen3:1.7b |  |  |  |  |  |  | 5 | 1.000 | 0.781 | 1.000 | 0.125 | salidas/bge-m3@ollama-local/resultados_k5.csv | golden_set.json · 8 respondibles, 2 negativas |
 <!-- tabla:fin -->
 
 ## Journal
