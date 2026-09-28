@@ -1,0 +1,23 @@
+== Pregunta 1: el denominador del Hit Rate
+k=3: aciertos 7 de 8 respondibles · 2 negativas
+  Hit Rate antes (sobre las 10): 0.700 · techo de un sistema perfecto: 0.800
+  Hit Rate ahora (sobre las 8 respondibles): 0.875
+  MRR antes: 0.600 · MRR ahora: 0.750
+  abstención correcta: 2 de 2 negativas
+k=5: aciertos 8 de 8 respondibles · 2 negativas
+  Hit Rate antes (sobre las 10): 0.800 · techo de un sistema perfecto: 0.800
+  Hit Rate ahora (sobre las 8 respondibles): 1.000
+  MRR antes: 0.625 · MRR ahora: 0.781
+  abstención correcta: 2 de 2 negativas
+
+== Pregunta 2: una pregunta global por el RAG vectorial
+pregunta: What are the main themes that run across all the papers in this corpus, and how do they relate to each other?
+  1. 0.482  blei-2003-lda-0001
+  2. 0.471  blei-2003-lda-0031
+  3. 0.469  blei-2003-lda-0037
+  4. 0.447  brown-2020-gpt3-0153
+  5. 0.446  blei-2003-lda-0005
+documentos distintos en el top-5: 2 de 16 · {'blei-2003-lda.pdf': 4, 'brown-2020-gpt3.pdf': 1}
+contexto: 5 × 512 = 2560 tokens de 387086 (0.66% del corpus)
+respuesta [ollama:qwen3:1.7b] abstuvo=True:
+  El corpus no contiene información suficiente.
