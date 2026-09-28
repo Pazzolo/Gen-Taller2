@@ -9,9 +9,9 @@ Each step gets its own branch, created from `main` after the previous step's pul
 | Branch | Contents | Status |
 |---|---|---|
 | `step-0-setup` | `.gitignore`, scaffold, gameplan | Merged (PR #1). The pinned `requirements.txt` moves to Step 3, when everything is installed |
-| `step-1-corpus` | `corpus/` plus the page and text-layer check | In review |
-| `step-2-part0` | Part 0: the three silent failures, scripts and raw output | Not started |
-| `step-3-baseline` | Part 1: the baseline RAG | Not started |
+| `step-1-corpus` | `corpus/` plus the page and text-layer check | Merged (PR #3) |
+| `step-2-part0` | Part 0: the three silent failures, scripts and raw output | Merged (PR #2) |
+| `step-3-baseline` | Part 1: the baseline RAG | In progress |
 | `step-4-evaluation` | Part 2: golden set, metrics, `resultados.csv`, worst cases | Not started |
 | `step-5-extension` | Part 3: the extension and its measurement | Not started |
 | `step-6-report` | Part 4: reflection and the PDF report | Not started |
