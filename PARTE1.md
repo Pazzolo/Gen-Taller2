@@ -4,7 +4,8 @@ Corpus: los 16 papers seminales de las semanas 1 y 2 (Opción B), **en inglés**
 todos con capa de texto (`salidas/corpus_verificacion.txt`).
 
 Embeddings: **bge-m3**, fila `embed_local_multilingue`, servido por un **Ollama local** y no por
-el de la H200, porque no se tenía la VPN (el detalle está en 1.3). Generación: **`qwen3:1.7b`**
+el de la H200, porque no se tenía la VPN. Después se comprobó que la H200 da los mismos
+resultados (el detalle está en 1.3). Generación: **`qwen3:1.7b`**
 por Ollama, fila `open_weight_pequeno`. Todo corre a costo cero. La configuración completa y la
 comparación con otras rutas están en `EXPERIMENTOS.md`.
 
@@ -132,10 +133,24 @@ contexto de 8192 y pesos en F16, lo que coincide con bge-m3. Se mantiene `trunca
 que un texto que no quepa da error en vez de recortarse. La ingesta fragmenta con el tokenizador
 de Hugging Face `BAAI/bge-m3`, el mismo que el pipeline usa contra la H200.
 
-Hay que ser claro en que **no es la H200**. El modelo es el mismo, pero no se verificó que el
-servidor de la H200 sirva exactamente la misma versión ni la misma cuantización. Por eso la
-etiqueta de estas corridas es `bge-m3@ollama-local` y no `bge-m3@h200`. Cuando haya VPN se
-repite todo con la H200 y se comparan las dos filas en `EXPERIMENTOS.md`. Antes se intentó la
+Hay que ser claro en que **no es la H200**. El modelo es el mismo, pero cuando se corrió el
+baseline no se había verificado que el servidor de la H200 sirviera la misma versión ni la misma
+cuantización. Por eso la etiqueta de estas corridas es `bge-m3@ollama-local` y no `bge-m3@h200`.
+
+**Después se verificó contra la H200** (2026-09-28, ya con VPN). Se repitieron el índice, la
+evaluación 2.b y el híbrido de la Parte 3 con embeddings de la H200, en su propia colección
+(`taller2_bge_m3_h200`) y con el mismo generador local, para que lo único que cambiara fuera el
+servidor de embeddings. `comparar_configuraciones.py` deja el resultado en
+`salidas/comparacion_configuraciones.md`. Los dos Ollama sirven `bge-m3:latest` con el mismo
+digest (`7907646426070047…`, F16, 566,70 M de parámetros), o sea los mismos pesos byte a byte.
+Con 40 fragmentos del índice y las 10 preguntas, el coseno entre el vector local y el de la H200
+nunca baja de 0,999730. Hit Rate, MRR y las dos tasas de abstención salen idénticos, denso e
+híbrido, con k = 3 y k = 5. Con k = 3 el top-k coincide en las 10 preguntas, en el mismo orden.
+Con k = 5 hay una sola diferencia: en la pregunta 8 los cuatro primeros fragmentos son los
+mismos, pero el quinto puesto lo ocupa `ouyang-2022-instructgpt-0102` en local (0,5357) y
+`ouyang-2022-instructgpt-0084` en la H200 (0,5335). Es un empate casi exacto en el corte y no
+mueve ninguna métrica. Entonces las cifras de este informe, medidas en local, valen también para
+la H200, y no hizo falta rehacerlas. Antes se intentó la
 ruta de OpenAI (`embed_api_economico`), pero la clave fue rechazada (401) y no se indexó nada con
 ella. Un índice construido con un modelo solo se consulta con ese mismo modelo, así que cada
 configuración tiene su propia colección de Qdrant.

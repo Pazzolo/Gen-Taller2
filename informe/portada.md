@@ -14,12 +14,13 @@ CSV crudos del repositorio.
 |---|---|
 | Corpus | Opción B: 16 papers de las semanas 1 y 2, **inglés**, 440 páginas, todos con capa de texto |
 | Fragmentación | tamaño fijo, **512 tokens con 102 de solapamiento**, tokens de `BAAI/bge-m3` → 948 fragmentos |
-| Embeddings | fila **`embed_local_multilingue`** (BAAI/bge-m3, 1024 dim., 8192 tokens), **verificada 2026-08-27**, servida por **Ollama local** (no la H200: no había VPN) |
+| Embeddings | fila **`embed_local_multilingue`** (BAAI/bge-m3, 1024 dim., 8192 tokens), **verificada 2026-08-27**, servida por **Ollama local** (no había VPN); verificada después contra la H200: mismo digest y métricas idénticas (Parte 1.3) |
 | Índice | Qdrant 1.19.1 en contenedor, colección `taller2_bge_m3_local`, coseno |
 | Generación | fila **`open_weight_pequeno`** (`qwen3:1.7b`) por Ollama local, temperatura 0 |
 | Golden set | 10 preguntas: 4 simples, 3 multi-fragmento, 2 negativas, 1 adversarial (respondible) |
 | Baseline | Hit Rate@3 **0,875**, @5 **1,000** · MRR **0,750** / **0,781** · abstención correcta **1,000** · indebida **0,250** / **0,125** |
 | Extensión | Opción B, **híbrido BM25 + denso (RRF)**: Hit Rate@3 **1,000** · MRR **0,854** · indebida **0,125** / **0,000** |
+| Contraprueba | generador `granite3.3` (H200) sobre la misma recuperación: abstención indebida **0,000** con los dos k, pero responde con conocimiento propio donde el contexto no alcanza (Parte 2.c) |
 | Costo | **USD 0**: ninguna llamada a API de pago |
 
 ## Arquitectura
@@ -56,7 +57,8 @@ CSV crudos del repositorio.
   que coincide con lo que reportó el evaluador.
 - **Registro de corridas:** cada corrida escribe en `salidas/<modelo>@<host>/` y añade una fila
   a `experimentos.csv`. `EXPERIMENTOS.md` tiene el prefijo exacto de cada configuración y la
-  tabla de todas las corridas, preparada para repetir el baseline en la H200 y comparar.
+  tabla de todas las corridas, incluida la repetición del baseline en la H200.
+  `comparar_configuraciones.py` compara las dos configuraciones (Parte 1.3).
 - **Credenciales:** ninguna clave en el repositorio. `.env` está en `.gitignore` y no está
   versionado, y una búsqueda del patrón de claves de OpenAI (`sk-…`) en los archivos
   versionados no encuentra nada.

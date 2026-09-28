@@ -63,13 +63,17 @@ it empty forces generation through Ollama.
   the local `qwen3:1.7b` so embeddings are the only change. The two servers serve the same
   weights (same digest), the vectors agree to a cosine of at least 0.9997, and Hit Rate, MRR and
   both abstention rates match exactly, dense and hybrid, at k=3 and k=5. The only difference is
-  question 8's top-5 at k=5, where two chunks with nearly equal scores swap. Details in
+  the fifth slot of question 8's top-5: `ouyang-2022-instructgpt-0102` locally (0.5357) and
+  `ouyang-2022-instructgpt-0084` on the H200 (0.5335). The first four match. Details in
   `salidas/comparacion_configuraciones.md`.
 - **2026-09-28: swapped the generator to `granite3.3` on the H200**, keeping the `bge-m3@h200`
   index (dense, k=3 and k=5; output in `salidas/bge-m3@h200/granite3.3/`, so the `qwen3:1.7b`
   results stay intact). Hit Rate and MRR are unchanged, as expected, since retrieval does not
   depend on the generator. Wrong abstentions drop to 0.000 at both k (from 0.250 and 0.125 with
-  `qwen3:1.7b`), and both negatives are still refused. The recovered answers are the multi-chunk
-  questions 5 and 6. `granite3.3` was the only generator that loaded on the H200 that day; the
+  `qwen3:1.7b`), and both negatives are still refused. Question 6 is a real fix (answered from
+  `rafailov-2023-dpo-0003`), but question 5 at k=3 is not: no Lewis et al. chunk is retrieved, so
+  `granite3.3` describes RAG from its own knowledge. On negative 9 it abstains but adds a false
+  claim ("GPT-4 … Microsoft"), which `se_abstuvo` still counts as a correct abstention. See the
+  counter-test in PARTE2.md, 2.c. `granite3.3` was the only generator that loaded on the H200 that day; the
   other large models crashed the Ollama runner. Hybrid was not re-run because `hibrido.py` has
   no output-path option and would overwrite the `qwen3:1.7b` hybrid results.
