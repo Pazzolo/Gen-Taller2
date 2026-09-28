@@ -1,44 +1,44 @@
-tokenizador: BAAI/bge-m3 · chunk_tokens=512 · overlap_tokens=102 · tope 8192
+embeddings: openai · text-embedding-3-small · chunk_tokens=512 · overlap_tokens=102 · tope 8192
 
 salida de load_corpus:
-  ingesta: bai-2022-constitutional-ai.pdf: 34 página(s), 94294 caracteres útiles → 75 fragmento(s)
-  ingesta: blei-2003-lda.pdf: 30 página(s), 59953 caracteres útiles → 57 fragmento(s)
-  ingesta: brown-2020-gpt3.pdf: 75 página(s), 186342 caracteres útiles → 156 fragmento(s)
-  ingesta: doersch-2016-tutorial-vae.pdf: 23 página(s), 36740 caracteres útiles → 33 fragmento(s)
-  ingesta: edge-2024-graphrag.pdf: 26 página(s), 70385 caracteres útiles → 60 fragmento(s)
-  ingesta: es-2023-ragas.pdf: 8 página(s), 25583 caracteres útiles → 21 fragmento(s)
-  ingesta: gao-2023-rag-survey.pdf: 21 página(s), 86641 caracteres útiles → 78 fragmento(s)
-  ingesta: kingma-2013-vae.pdf: 14 página(s), 31786 caracteres útiles → 31 fragmento(s)
-  ingesta: lewis-2020-rag.pdf: 19 página(s), 55094 caracteres útiles → 47 fragmento(s)
-  ingesta: ng-jordan-2001-discriminative-vs-generative.pdf: 8 página(s), 18996 caracteres útiles → 19 fragmento(s)
-  ingesta: ouyang-2022-instructgpt.pdf: 68 página(s), 143167 caracteres útiles → 118 fragmento(s)
-  ingesta: rafailov-2023-dpo.pdf: 27 página(s), 71700 caracteres útiles → 66 fragmento(s)
-  ingesta: rag-anything-2025.pdf: 18 página(s), 57304 caracteres útiles → 41 fragmento(s)
-  ingesta: reimers-2019-sentence-bert.pdf: 11 página(s), 35133 caracteres útiles → 31 fragmento(s)
+  ingesta: bai-2022-constitutional-ai.pdf: 34 página(s), 94294 caracteres útiles → 69 fragmento(s)
+  ingesta: blei-2003-lda.pdf: 30 página(s), 59953 caracteres útiles → 63 fragmento(s)
+  ingesta: brown-2020-gpt3.pdf: 75 página(s), 186342 caracteres útiles → 160 fragmento(s)
+  ingesta: doersch-2016-tutorial-vae.pdf: 23 página(s), 36740 caracteres útiles → 32 fragmento(s)
+  ingesta: edge-2024-graphrag.pdf: 26 página(s), 70385 caracteres útiles → 57 fragmento(s)
+  ingesta: es-2023-ragas.pdf: 8 página(s), 25583 caracteres útiles → 20 fragmento(s)
+  ingesta: gao-2023-rag-survey.pdf: 21 página(s), 86641 caracteres útiles → 71 fragmento(s)
+  ingesta: kingma-2013-vae.pdf: 14 página(s), 31786 caracteres útiles → 29 fragmento(s)
+  ingesta: lewis-2020-rag.pdf: 19 página(s), 55094 caracteres útiles → 45 fragmento(s)
+  ingesta: ng-jordan-2001-discriminative-vs-generative.pdf: 8 página(s), 18996 caracteres útiles → 18 fragmento(s)
+  ingesta: ouyang-2022-instructgpt.pdf: 68 página(s), 143167 caracteres útiles → 119 fragmento(s)
+  ingesta: rafailov-2023-dpo.pdf: 27 página(s), 71700 caracteres útiles → 63 fragmento(s)
+  ingesta: rag-anything-2025.pdf: 18 página(s), 57304 caracteres útiles → 35 fragmento(s)
+  ingesta: reimers-2019-sentence-bert.pdf: 11 página(s), 35133 caracteres útiles → 30 fragmento(s)
   ingesta: vaswani-2017-attention-is-all-you-need.pdf: 15 página(s), 31566 caracteres útiles → 25 fragmento(s)
-  ingesta: wei-2022-chain-of-thought.pdf: 43 página(s), 105503 caracteres útiles → 90 fragmento(s)
+  ingesta: wei-2022-chain-of-thought.pdf: 43 página(s), 105503 caracteres útiles → 94 fragmento(s)
 
 doc                                               tokens tok/pág tok/pal %refs+ap guiones ligad  encabezados/pies repetidos
-bai-2022-constitutional-ai.pdf                     30809     906    1.61    51.5%      69   130  —
-blei-2003-lda.pdf                                  23402     780    1.91    19.9%      69   153  'BLEI ,N G, AND JORDAN'; 'LATENT DIRICHLET ALLOCATION'
-brown-2020-gpt3.pdf                                63802     851    1.67    12.8%      23   444  —
-doersch-2016-tutorial-vae.pdf                      13590     591    1.67     7.5%      53    67  —
-edge-2024-graphrag.pdf                             24318     935    1.76    54.4%      69     0  —
-es-2023-ragas.pdf                                   8335    1042    1.69    37.9%     131     0  'question: [question]'
-gao-2023-rag-survey.pdf                            31823    1515    2.00    41.5%     202     0  —
-kingma-2013-vae.pdf                                12626     902    1.94    34.9%      47    49  —
-lewis-2020-rag.pdf                                 19244    1013    1.94    48.5%      47   114  —
-ng-jordan-2001-discriminative-vs-generative.pdf     7539     942    1.73     3.1%       0     0  —
-ouyang-2022-instructgpt.pdf                        48412     712    1.64    59.7%      41   352  —
-rafailov-2023-dpo.pdf                              26906     997    1.82    59.3%      51     0  —
-rag-anything-2025.pdf                              16671     926    1.93    32.1%      56     0  'RAG-ANYTHING: ALL-IN-ONE RAG FRAMEWORK'
-reimers-2019-sentence-bert.pdf                     12540    1140    1.89    25.4%     221    77  —
-vaswani-2017-attention-is-all-you-need.pdf         10319     688    1.71    26.0%      15     0  —
-wei-2022-chain-of-thought.pdf                      36750     855    1.62    75.1%      48   288  —
+bai-2022-constitutional-ai.pdf                     28315     833    1.48    50.5%      69   130  —
+blei-2003-lda.pdf                                  25865     862    2.11    18.5%      69   153  'BLEI ,N G, AND JORDAN'; 'LATENT DIRICHLET ALLOCATION'
+brown-2020-gpt3.pdf                                65607     875    1.72    12.7%      23   444  —
+doersch-2016-tutorial-vae.pdf                      13181     573    1.62     8.1%      53    67  —
+edge-2024-graphrag.pdf                             23443     902    1.70    54.8%      69     0  —
+es-2023-ragas.pdf                                   8141    1018    1.65    39.5%     131     0  'question: [question]'
+gao-2023-rag-survey.pdf                            29052    1383    1.83    43.9%     202     0  —
+kingma-2013-vae.pdf                                11833     845    1.81    35.8%      47    49  —
+lewis-2020-rag.pdf                                 18575     978    1.88    48.4%      47   114  —
+ng-jordan-2001-discriminative-vs-generative.pdf     7168     896    1.65     3.4%       0     0  —
+ouyang-2022-instructgpt.pdf                        48630     715    1.65    60.5%      41   352  —
+rafailov-2023-dpo.pdf                              25761     954    1.74    60.1%      51     0  —
+rag-anything-2025.pdf                              14242     791    1.65    33.0%      56     0  'RAG-ANYTHING: ALL-IN-ONE RAG FRAMEWORK'
+reimers-2019-sentence-bert.pdf                     12302    1118    1.85    26.3%     221    77  —
+vaswani-2017-attention-is-all-you-need.pdf         10256     684    1.70    29.4%      15     0  —
+wei-2022-chain-of-thought.pdf                      38416     893    1.69    76.7%      48   288  —
 
-total: 387086 tokens en 440 páginas · 948 fragmentos
-tokens por página: mediana 854 (p25 635, p75 1071)
-tokens por palabra: mediana 1.74 (min 1.61, max 2.00)
-un fragmento de 512 tokens ≈ 0.60 páginas ≈ 293 palabras
-fragmentos: 61–513 tokens re-tokenizados (mediana 512)
-bibliografía + apéndices: 40.6% de los tokens del corpus (desde el último encabezado References/Bibliography hasta el final; incluye los apéndices)
+total: 380787 tokens en 440 páginas · 930 fragmentos
+tokens por página: mediana 814 (p25 630, p75 1036)
+tokens por palabra: mediana 1.70 (min 1.48, max 2.11)
+un fragmento de 512 tokens ≈ 0.63 páginas ≈ 302 palabras
+fragmentos: 197–514 tokens re-tokenizados (mediana 512)
+bibliografía + apéndices: 41.0% de los tokens del corpus (desde el último encabezado References/Bibliography hasta el final; incluye los apéndices)

@@ -1,11 +1,11 @@
 """
 Parte 1.1 y 1.2 del taller: qué se pierde en la ingesta y cómo se reparte el corpus en tokens.
 
-Usa el tokenizador de `BAAI/bge-m3` (se descarga solo el tokenizador, no hace falta la VPN),
-que es el mismo con el que `rag_pipeline.py` fragmenta contra la H200, y la misma
-`load_corpus` del andamiaje, así que los fragmentos son los que se van a indexar.
+Usa el tokenizador y el tope del codificador que elige `EMBEDDING_BACKEND` —el mismo con el
+que `rag_pipeline.py` fragmenta— y la misma `load_corpus` del andamiaje, así que los
+fragmentos son los que se van a indexar. No llama a ninguna API: solo tokeniza.
 
-    python inspeccion_ingesta.py [chunk_tokens] [overlap_tokens]    # por defecto 512 102
+    EMBEDDING_BACKEND=openai python inspeccion_ingesta.py [chunk_tokens] [overlap_tokens]   # 512 102
 
 Escribe `salidas/parte1_ingesta.txt`.
 """
@@ -21,12 +21,10 @@ import re
 import statistics
 import sys
 
-from transformers import AutoTokenizer
-
 from ingestion import load_corpus, read_document
+from rag_pipeline import EMBEDDING_BACKEND, EMBEDDING_MODEL, crear_codificador
 
 CORPUS = Path("corpus")
-TOPE_BGE_M3 = 8192   # fila embed_local_multilingue, verificada 2026-08-27
 # Encabezado de la bibliografía: una línea que es solo «References» o «Bibliography».
 REFERENCIAS = re.compile(r"^\s*(\d+\s*)?(references|bibliography)\s*$", re.I | re.M)
 GUION_PARTIDO = re.compile(r"[a-z]-\s+[a-z]")   # «col-\nlection»: palabra cortada al final de línea
@@ -44,15 +42,16 @@ def lineas_repetidas(paginas: list[str], minimo: float = 0.3) -> list[str]:
 
 def main(chunk_tokens: int, overlap_tokens: int) -> str:
     logging.disable(logging.WARNING)
-    tok = AutoTokenizer.from_pretrained("BAAI/bge-m3")
+    codificador = crear_codificador()
+    tok, tope = codificador.tokenizer, codificador.max_seq_tokens
     contar = lambda t: len(tok(t, add_special_tokens=False, truncation=False)["input_ids"])
 
     silencio = io.StringIO()
     with redirect_stdout(silencio):
-        chunks = load_corpus(CORPUS, tokenizer=tok, max_seq_tokens=TOPE_BGE_M3,
+        chunks = load_corpus(CORPUS, tokenizer=tok, max_seq_tokens=tope,
                              chunk_tokens=chunk_tokens, overlap_tokens=overlap_tokens)
-    lineas = [f"tokenizador: BAAI/bge-m3 · chunk_tokens={chunk_tokens} · "
-              f"overlap_tokens={overlap_tokens} · tope {TOPE_BGE_M3}", "",
+    lineas = [f"embeddings: {EMBEDDING_BACKEND} · {EMBEDDING_MODEL} · chunk_tokens={chunk_tokens} · "
+              f"overlap_tokens={overlap_tokens} · tope {tope}", "",
               "salida de load_corpus:", *("  " + l for l in silencio.getvalue().splitlines()), ""]
 
     lineas.append(f"{'doc':<48} {'tokens':>7} {'tok/pág':>7} {'tok/pal':>7} "
