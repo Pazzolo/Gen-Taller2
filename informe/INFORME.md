@@ -14,12 +14,13 @@ CSV crudos del repositorio.
 |---|---|
 | Corpus | Opción B: 16 papers de las semanas 1 y 2, **inglés**, 440 páginas, todos con capa de texto |
 | Fragmentación | tamaño fijo, **512 tokens con 102 de solapamiento**, tokens de `BAAI/bge-m3` → 948 fragmentos |
-| Embeddings | fila **`embed_local_multilingue`** (BAAI/bge-m3, 1024 dim., 8192 tokens), **verificada 2026-08-27**, servida por **Ollama local** (no la H200: no había VPN) |
+| Embeddings | fila **`embed_local_multilingue`** (BAAI/bge-m3, 1024 dim., 8192 tokens), **verificada 2026-08-27**, servida por **Ollama local** (no había VPN); verificada después contra la H200: mismo digest y métricas idénticas (Parte 1.3) |
 | Índice | Qdrant 1.19.1 en contenedor, colección `taller2_bge_m3_local`, coseno |
 | Generación | fila **`open_weight_pequeno`** (`qwen3:1.7b`) por Ollama local, temperatura 0 |
 | Golden set | 10 preguntas: 4 simples, 3 multi-fragmento, 2 negativas, 1 adversarial (respondible) |
 | Baseline | Hit Rate@3 **0,875**, @5 **1,000** · MRR **0,750** / **0,781** · abstención correcta **1,000** · indebida **0,250** / **0,125** |
 | Extensión | Opción B, **híbrido BM25 + denso (RRF)**: Hit Rate@3 **1,000** · MRR **0,854** · indebida **0,125** / **0,000** |
+| Contraprueba | generador `granite3.3` (H200) sobre la misma recuperación: abstención indebida **0,000** con los dos k, pero responde con conocimiento propio donde el contexto no alcanza (Parte 2.c) |
 | Costo | **USD 0**: ninguna llamada a API de pago |
 
 ## Arquitectura
@@ -56,7 +57,8 @@ CSV crudos del repositorio.
   que coincide con lo que reportó el evaluador.
 - **Registro de corridas:** cada corrida escribe en `salidas/<modelo>@<host>/` y añade una fila
   a `experimentos.csv`. `EXPERIMENTOS.md` tiene el prefijo exacto de cada configuración y la
-  tabla de todas las corridas, preparada para repetir el baseline en la H200 y comparar.
+  tabla de todas las corridas, incluida la repetición del baseline en la H200.
+  `comparar_configuraciones.py` compara las dos configuraciones (Parte 1.3).
 - **Credenciales:** ninguna clave en el repositorio. `.env` está en `.gitignore` y no está
   versionado, y una búsqueda del patrón de claves de OpenAI (`sk-…`) en los archivos
   versionados no encuentra nada.
@@ -207,7 +209,8 @@ Corpus: los 16 papers seminales de las semanas 1 y 2 (Opción B), **en inglés**
 todos con capa de texto (`salidas/corpus_verificacion.txt`).
 
 Embeddings: **bge-m3**, fila `embed_local_multilingue`, servido por un **Ollama local** y no por
-el de la H200, porque no se tenía la VPN (el detalle está en 1.3). Generación: **`qwen3:1.7b`**
+el de la H200, porque no se tenía la VPN. Después se comprobó que la H200 da los mismos
+resultados (el detalle está en 1.3). Generación: **`qwen3:1.7b`**
 por Ollama, fila `open_weight_pequeno`. Todo corre a costo cero. La configuración completa y la
 comparación con otras rutas están en `EXPERIMENTOS.md`.
 
@@ -335,10 +338,24 @@ contexto de 8192 y pesos en F16, lo que coincide con bge-m3. Se mantiene `trunca
 que un texto que no quepa da error en vez de recortarse. La ingesta fragmenta con el tokenizador
 de Hugging Face `BAAI/bge-m3`, el mismo que el pipeline usa contra la H200.
 
-Hay que ser claro en que **no es la H200**. El modelo es el mismo, pero no se verificó que el
-servidor de la H200 sirva exactamente la misma versión ni la misma cuantización. Por eso la
-etiqueta de estas corridas es `bge-m3@ollama-local` y no `bge-m3@h200`. Cuando haya VPN se
-repite todo con la H200 y se comparan las dos filas en `EXPERIMENTOS.md`. Antes se intentó la
+Hay que ser claro en que **no es la H200**. El modelo es el mismo, pero cuando se corrió el
+baseline no se había verificado que el servidor de la H200 sirviera la misma versión ni la misma
+cuantización. Por eso la etiqueta de estas corridas es `bge-m3@ollama-local` y no `bge-m3@h200`.
+
+**Después se verificó contra la H200** (2026-09-28, ya con VPN). Se repitieron el índice, la
+evaluación 2.b y el híbrido de la Parte 3 con embeddings de la H200, en su propia colección
+(`taller2_bge_m3_h200`) y con el mismo generador local, para que lo único que cambiara fuera el
+servidor de embeddings. `comparar_configuraciones.py` deja el resultado en
+`salidas/comparacion_configuraciones.md`. Los dos Ollama sirven `bge-m3:latest` con el mismo
+digest (`7907646426070047…`, F16, 566,70 M de parámetros), o sea los mismos pesos byte a byte.
+Con 40 fragmentos del índice y las 10 preguntas, el coseno entre el vector local y el de la H200
+nunca baja de 0,999730. Hit Rate, MRR y las dos tasas de abstención salen idénticos, denso e
+híbrido, con k = 3 y k = 5. Con k = 3 el top-k coincide en las 10 preguntas, en el mismo orden.
+Con k = 5 hay una sola diferencia: en la pregunta 8 los cuatro primeros fragmentos son los
+mismos, pero el quinto puesto lo ocupa `ouyang-2022-instructgpt-0102` en local (0,5357) y
+`ouyang-2022-instructgpt-0084` en la H200 (0,5335). Es un empate casi exacto en el corte y no
+mueve ninguna métrica. Entonces las cifras de este informe, medidas en local, valen también para
+la H200, y no hizo falta rehacerlas. Antes se intentó la
 ruta de OpenAI (`embed_api_economico`), pero la clave fue rechazada (401) y no se indexó nada con
 ella. Un índice construido con un modelo solo se consulta con ese mismo modelo, así que cada
 configuración tiene su propia colección de Qdrant.
@@ -428,7 +445,7 @@ export H200_EMBED_URL=http://localhost:11434 EMBEDDING_BACKEND=h200 OPENAI_API_K
 python verificar_golden.py                    # 2.a: el golden set contra los fragmentos reales
 python evaluation.py --k 3 --sin-indexar      # 2.b (reusa el índice de la Parte 1)
 python evaluation.py --k 5 --sin-indexar
-python tabla_metricas.py                      # tabla desde los CSV + resultados.csv
+python tabla_metricas.py --entregable         # tabla desde los CSV + ./resultados.csv
 python analisis_fallos.py                     # 2.c: evidencia de los peores casos
 ```
 
@@ -597,6 +614,48 @@ La anotación era más estricta que la pregunta. No se corrige ahora, porque cam
 después de ver los resultados sería ajustar el verificador al sistema. Queda como candidata para
 una versión 1.1 del golden set, declarada como tal, y descuenta el 0,125 que separa el Hit Rate@3
 de 1,000.
+
+### Contraprueba: otro generador sobre la misma recuperación
+
+Dos de los tres casos se atribuyeron a la generación, y eso se puede poner a prueba: si el
+diagnóstico es correcto, un generador más capaz sobre **los mismos fragmentos** debería
+arreglarlos. Se repitió la 2.b con `granite3.3` (8,2 B, en el Ollama de la H200), con el mismo
+prompt, temperatura 0 y el índice `bge-m3@h200`. Ese índice da el mismo top-k que el local en
+estas preguntas (Parte 1.3), así que lo único que cambia es el generador. Se eligió `granite3.3`
+porque fue el único generador que cargó en la H200 ese día; `qwen3:32b`, `gemma3:27b` y
+`gpt-oss:120b` hicieron caer el proceso de Ollama del servidor. Salida cruda en
+`salidas/bge-m3@h200/granite3.3/`.
+
+| generador | k | Hit Rate@k | MRR | abstención correcta | abstención indebida |
+|---|---|---|---|---|---|
+| `qwen3:1.7b` | 3 | 0,875 | 0,750 | 1,000 | 0,250 |
+| `granite3.3` | 3 | 0,875 | 0,750 | 1,000 | **0,000** |
+| `qwen3:1.7b` | 5 | 1,000 | 0,781 | 1,000 | 0,125 |
+| `granite3.3` | 5 | 1,000 | 0,781 | 1,000 | **0,000** |
+
+Hit Rate y MRR no se mueven, como se esperaba, porque miden la recuperación. Lo que cambia son
+las respuestas. En el caso 1, `granite3.3` responde la pregunta 6 con los dos k usando lo que está
+en `rafailov-2023-dpo-0003` (modelo de recompensa + PPO contra la pérdida directa de DPO). En el
+caso 3 responde «aproximadamente 100 billion parameters» también con k = 5, sin dejarse arrastrar
+por el 540B. Eso respalda que esos dos casos eran fallas de generación y no de recuperación. La
+Parte 3 llega a lo mismo en la pregunta 6 por el otro lado: el híbrido trae un fragmento que
+nombra InstructGPT y `qwen3:1.7b` deja de abstenerse.
+
+Pero el 0,000 no es todo mejora, y hay que leer las respuestas para verlo. En la pregunta 5 con
+k = 3 (el caso 2) `granite3.3` también responde, y describe el RAG de Lewis et al. con detalle,
+aunque ninguno de los tres fragmentos recuperados es de ese paper. Esa parte sale de lo que el
+modelo ya sabía, no del contexto, o sea que incumple la instrucción del prompt. `qwen3:1.7b` se
+abstenía ahí, y según lo discutido en el caso 2 eso era lo correcto. El generador más grande
+tapa una falla de recuperación en vez de arreglarla, y la métrica lo cuenta como acierto. Algo
+parecido pasa en la negativa 9: `granite3.3` dice la frase de abstención, pero agrega que
+«GPT-4 es un modelo desarrollado por Microsoft», que es falso y no está en el corpus. Como
+`se_abstuvo` solo busca la frase, la cuenta como abstención correcta.
+
+La conclusión honesta es que el generador explica los casos 1 y 3, pero cambiarlo trae su propio
+problema: responde con conocimiento propio cuando el contexto no alcanza. Con 8 respondibles y
+dos modelos que difieren en tamaño **y** en familia, esto no dice cuál de los dos factores pesa
+más. Para medirlo bien haría falta una métrica de fidelidad al contexto, como la de RAGAS
+(Opción D), que no se corrió.
 
 ### Las tres fallas silenciosas de la Parte 0, en este corpus
 

@@ -39,7 +39,7 @@ CSV crudos del repositorio.</p>
 </tr>
 <tr>
 <td>Embeddings</td>
-<td>fila <strong><code>embed_local_multilingue</code></strong> (BAAI/bge-m3, 1024 dim., 8192 tokens), <strong>verificada 2026-08-27</strong>, servida por <strong>Ollama local</strong> (no la H200: no había VPN)</td>
+<td>fila <strong><code>embed_local_multilingue</code></strong> (BAAI/bge-m3, 1024 dim., 8192 tokens), <strong>verificada 2026-08-27</strong>, servida por <strong>Ollama local</strong> (no había VPN); verificada después contra la H200: mismo digest y métricas idénticas (Parte 1.3)</td>
 </tr>
 <tr>
 <td>Índice</td>
@@ -60,6 +60,10 @@ CSV crudos del repositorio.</p>
 <tr>
 <td>Extensión</td>
 <td>Opción B, <strong>híbrido BM25 + denso (RRF)</strong>: Hit Rate@3 <strong>1,000</strong> · MRR <strong>0,854</strong> · indebida <strong>0,125</strong> / <strong>0,000</strong></td>
+</tr>
+<tr>
+<td>Contraprueba</td>
+<td>generador <code>granite3.3</code> (H200) sobre la misma recuperación: abstención indebida <strong>0,000</strong> con los dos k, pero responde con conocimiento propio donde el contexto no alcanza (Parte 2.c)</td>
 </tr>
 <tr>
 <td>Costo</td>
@@ -98,7 +102,8 @@ CSV crudos del repositorio.</p>
   que coincide con lo que reportó el evaluador.</li>
 <li><strong>Registro de corridas:</strong> cada corrida escribe en <code>salidas/&lt;modelo&gt;@&lt;host&gt;/</code> y añade una fila
   a <code>experimentos.csv</code>. <code>EXPERIMENTOS.md</code> tiene el prefijo exacto de cada configuración y la
-  tabla de todas las corridas, preparada para repetir el baseline en la H200 y comparar.</li>
+  tabla de todas las corridas, incluida la repetición del baseline en la H200.
+  <code>comparar_configuraciones.py</code> compara las dos configuraciones (Parte 1.3).</li>
 <li><strong>Credenciales:</strong> ninguna clave en el repositorio. <code>.env</code> está en <code>.gitignore</code> y no está
   versionado, y una búsqueda del patrón de claves de OpenAI (<code>sk-…</code>) en los archivos
   versionados no encuentra nada.</li>
@@ -213,7 +218,8 @@ puntajes de las negativas se separan o no de los de las respondibles; esa column
 <p>Corpus: los 16 papers seminales de las semanas 1 y 2 (Opción B), <strong>en inglés</strong>, 440 páginas,
 todos con capa de texto (<code>salidas/corpus_verificacion.txt</code>).</p>
 <p>Embeddings: <strong>bge-m3</strong>, fila <code>embed_local_multilingue</code>, servido por un <strong>Ollama local</strong> y no por
-el de la H200, porque no se tenía la VPN (el detalle está en 1.3). Generación: <strong><code>qwen3:1.7b</code></strong>
+el de la H200, porque no se tenía la VPN. Después se comprobó que la H200 da los mismos
+resultados (el detalle está en 1.3). Generación: <strong><code>qwen3:1.7b</code></strong>
 por Ollama, fila <code>open_weight_pequeno</code>. Todo corre a costo cero. La configuración completa y la
 comparación con otras rutas están en <code>EXPERIMENTOS.md</code>.</p>
 <p>Para reproducir la Parte 1:</p>
@@ -322,10 +328,23 @@ habla con un Ollama, y en vez del de la H200 se usó uno local con <code>bge-m3:
 contexto de 8192 y pesos en F16, lo que coincide con bge-m3. Se mantiene <code>truncate: false</code>, así
 que un texto que no quepa da error en vez de recortarse. La ingesta fragmenta con el tokenizador
 de Hugging Face <code>BAAI/bge-m3</code>, el mismo que el pipeline usa contra la H200.</p>
-<p>Hay que ser claro en que <strong>no es la H200</strong>. El modelo es el mismo, pero no se verificó que el
-servidor de la H200 sirva exactamente la misma versión ni la misma cuantización. Por eso la
-etiqueta de estas corridas es <code>bge-m3@ollama-local</code> y no <code>bge-m3@h200</code>. Cuando haya VPN se
-repite todo con la H200 y se comparan las dos filas en <code>EXPERIMENTOS.md</code>. Antes se intentó la
+<p>Hay que ser claro en que <strong>no es la H200</strong>. El modelo es el mismo, pero cuando se corrió el
+baseline no se había verificado que el servidor de la H200 sirviera la misma versión ni la misma
+cuantización. Por eso la etiqueta de estas corridas es <code>bge-m3@ollama-local</code> y no <code>bge-m3@h200</code>.</p>
+<p><strong>Después se verificó contra la H200</strong> (2026-09-28, ya con VPN). Se repitieron el índice, la
+evaluación 2.b y el híbrido de la Parte 3 con embeddings de la H200, en su propia colección
+(<code>taller2_bge_m3_h200</code>) y con el mismo generador local, para que lo único que cambiara fuera el
+servidor de embeddings. <code>comparar_configuraciones.py</code> deja el resultado en
+<code>salidas/comparacion_configuraciones.md</code>. Los dos Ollama sirven <code>bge-m3:latest</code> con el mismo
+digest (<code>7907646426070047…</code>, F16, 566,70 M de parámetros), o sea los mismos pesos byte a byte.
+Con 40 fragmentos del índice y las 10 preguntas, el coseno entre el vector local y el de la H200
+nunca baja de 0,999730. Hit Rate, MRR y las dos tasas de abstención salen idénticos, denso e
+híbrido, con k = 3 y k = 5. Con k = 3 el top-k coincide en las 10 preguntas, en el mismo orden.
+Con k = 5 hay una sola diferencia: en la pregunta 8 los cuatro primeros fragmentos son los
+mismos, pero el quinto puesto lo ocupa <code>ouyang-2022-instructgpt-0102</code> en local (0,5357) y
+<code>ouyang-2022-instructgpt-0084</code> en la H200 (0,5335). Es un empate casi exacto en el corte y no
+mueve ninguna métrica. Entonces las cifras de este informe, medidas en local, valen también para
+la H200, y no hizo falta rehacerlas. Antes se intentó la
 ruta de OpenAI (<code>embed_api_economico</code>), pero la clave fue rechazada (401) y no se indexó nada con
 ella. Un índice construido con un modelo solo se consulta con ese mismo modelo, así que cada
 configuración tiene su propia colección de Qdrant.</p>
@@ -404,7 +423,7 @@ Parte 2:</p>
 python verificar_golden.py                    # 2.a: el golden set contra los fragmentos reales
 python evaluation.py --k 3 --sin-indexar      # 2.b (reusa el índice de la Parte 1)
 python evaluation.py --k 5 --sin-indexar
-python tabla_metricas.py                      # tabla desde los CSV + resultados.csv
+python tabla_metricas.py --entregable         # tabla desde los CSV + ./resultados.csv
 python analisis_fallos.py                     # 2.c: evidencia de los peores casos
 </code></pre>
 <p>Cambio declarado sobre el andamiaje: <code>evaluation.py</code> ahora escribe un CSV por configuración y
@@ -707,6 +726,82 @@ La anotación era más estricta que la pregunta. No se corrige ahora, porque cam
 después de ver los resultados sería ajustar el verificador al sistema. Queda como candidata para
 una versión 1.1 del golden set, declarada como tal, y descuenta el 0,125 que separa el Hit Rate@3
 de 1,000.</p>
+<h3>Contraprueba: otro generador sobre la misma recuperación</h3>
+<p>Dos de los tres casos se atribuyeron a la generación, y eso se puede poner a prueba: si el
+diagnóstico es correcto, un generador más capaz sobre <strong>los mismos fragmentos</strong> debería
+arreglarlos. Se repitió la 2.b con <code>granite3.3</code> (8,2 B, en el Ollama de la H200), con el mismo
+prompt, temperatura 0 y el índice <code>bge-m3@h200</code>. Ese índice da el mismo top-k que el local en
+estas preguntas (Parte 1.3), así que lo único que cambia es el generador. Se eligió <code>granite3.3</code>
+porque fue el único generador que cargó en la H200 ese día; <code>qwen3:32b</code>, <code>gemma3:27b</code> y
+<code>gpt-oss:120b</code> hicieron caer el proceso de Ollama del servidor. Salida cruda en
+<code>salidas/bge-m3@h200/granite3.3/</code>.</p>
+<table>
+<thead>
+<tr>
+<th>generador</th>
+<th>k</th>
+<th>Hit Rate@k</th>
+<th>MRR</th>
+<th>abstención correcta</th>
+<th>abstención indebida</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>qwen3:1.7b</code></td>
+<td>3</td>
+<td>0,875</td>
+<td>0,750</td>
+<td>1,000</td>
+<td>0,250</td>
+</tr>
+<tr>
+<td><code>granite3.3</code></td>
+<td>3</td>
+<td>0,875</td>
+<td>0,750</td>
+<td>1,000</td>
+<td><strong>0,000</strong></td>
+</tr>
+<tr>
+<td><code>qwen3:1.7b</code></td>
+<td>5</td>
+<td>1,000</td>
+<td>0,781</td>
+<td>1,000</td>
+<td>0,125</td>
+</tr>
+<tr>
+<td><code>granite3.3</code></td>
+<td>5</td>
+<td>1,000</td>
+<td>0,781</td>
+<td>1,000</td>
+<td><strong>0,000</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Hit Rate y MRR no se mueven, como se esperaba, porque miden la recuperación. Lo que cambia son
+las respuestas. En el caso 1, <code>granite3.3</code> responde la pregunta 6 con los dos k usando lo que está
+en <code>rafailov-2023-dpo-0003</code> (modelo de recompensa + PPO contra la pérdida directa de DPO). En el
+caso 3 responde «aproximadamente 100 billion parameters» también con k = 5, sin dejarse arrastrar
+por el 540B. Eso respalda que esos dos casos eran fallas de generación y no de recuperación. La
+Parte 3 llega a lo mismo en la pregunta 6 por el otro lado: el híbrido trae un fragmento que
+nombra InstructGPT y <code>qwen3:1.7b</code> deja de abstenerse.</p>
+<p>Pero el 0,000 no es todo mejora, y hay que leer las respuestas para verlo. En la pregunta 5 con
+k = 3 (el caso 2) <code>granite3.3</code> también responde, y describe el RAG de Lewis et al. con detalle,
+aunque ninguno de los tres fragmentos recuperados es de ese paper. Esa parte sale de lo que el
+modelo ya sabía, no del contexto, o sea que incumple la instrucción del prompt. <code>qwen3:1.7b</code> se
+abstenía ahí, y según lo discutido en el caso 2 eso era lo correcto. El generador más grande
+tapa una falla de recuperación en vez de arreglarla, y la métrica lo cuenta como acierto. Algo
+parecido pasa en la negativa 9: <code>granite3.3</code> dice la frase de abstención, pero agrega que
+«GPT-4 es un modelo desarrollado por Microsoft», que es falso y no está en el corpus. Como
+<code>se_abstuvo</code> solo busca la frase, la cuenta como abstención correcta.</p>
+<p>La conclusión honesta es que el generador explica los casos 1 y 3, pero cambiarlo trae su propio
+problema: responde con conocimiento propio cuando el contexto no alcanza. Con 8 respondibles y
+dos modelos que difieren en tamaño <strong>y</strong> en familia, esto no dice cuál de los dos factores pesa
+más. Para medirlo bien haría falta una métrica de fidelidad al contexto, como la de RAGAS
+(Opción D), que no se corrió.</p>
 <h3>Las tres fallas silenciosas de la Parte 0, en este corpus</h3>
 <ul>
 <li><strong>PDF sin texto (0.a): no está.</strong> Los 16 documentos tienen capa de texto y 0 páginas vacías
