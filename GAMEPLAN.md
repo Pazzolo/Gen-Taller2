@@ -13,7 +13,7 @@ Each step gets its own branch, created from `main` after the previous step's pul
 | `step-2-part0` | Part 0: the three silent failures, scripts and raw output | Merged (PR #2) |
 | `step-3-baseline` | Part 1: the baseline RAG | In review |
 | `step-4-evaluation` | Part 2: golden set, metrics, `resultados.csv`, worst cases | In review |
-| `step-5-extension` | Part 3: the extension and its measurement | Not started |
+| `step-5-extension` | Part 3: the extension and its measurement | In review |
 | `step-6-report` | Part 4: reflection and the PDF report | Not started |
 
 ## Step 0: Set up (≈30 min)
