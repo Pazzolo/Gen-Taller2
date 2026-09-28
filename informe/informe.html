@@ -1,0 +1,1198 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Taller 2 — RAG</title><style>
+@page { size: A4; margin: 18mm 16mm; }
+body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; font-size: 10pt;
+       line-height: 1.45; color: #1a1a1a; }
+h1 { font-size: 17pt; border-bottom: 2px solid #333; padding-bottom: 4px; margin-top: 0; }
+h1.parte { page-break-before: always; }
+h2 { font-size: 13pt; margin-top: 18px; border-bottom: 1px solid #ccc; }
+h3 { font-size: 11pt; margin-top: 14px; }
+h2, h3 { page-break-after: avoid; break-after: avoid; }
+code { font-family: Menlo, monospace; font-size: 8.5pt; background: #f3f3f3; padding: 0 2px; }
+pre { background: #f6f6f6; border: 1px solid #ddd; padding: 6px 8px; font-size: 7.6pt;
+      line-height: 1.3; white-space: pre-wrap; overflow-wrap: anywhere; }
+pre code { background: none; padding: 0; font-size: inherit; }
+table { border-collapse: collapse; margin: 8px 0; font-size: 8.8pt; page-break-inside: avoid; }
+th, td { border: 1px solid #bbb; padding: 3px 6px; text-align: left; vertical-align: top; }
+th { background: #eee; }
+</style></head><body><h1>Taller 2 — RAG con Vector Search y Evaluación</h1>
+<p><strong>Autor:</strong> Paolo A · <strong>Curso:</strong> IA Generativa, USFQ · <strong>Fecha:</strong> 2026-09-27</p>
+<p><strong>Repositorio:</strong> <code>github.com/Pazzolo/Gen-Taller2</code></p>
+<p>La regla del taller fue baseline → medir → extender → medir. Este informe junta las cinco
+partes. Todas las cifras salen de corridas reales, y cada tabla se puede reconstruir desde los
+CSV crudos del repositorio.</p>
+<h2>Resumen</h2>
+<table>
+<thead>
+<tr>
+<th>Elemento</th>
+<th>Detalle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Corpus</td>
+<td>Opción B: 16 papers de las semanas 1 y 2, <strong>inglés</strong>, 440 páginas, todos con capa de texto</td>
+</tr>
+<tr>
+<td>Fragmentación</td>
+<td>tamaño fijo, <strong>512 tokens con 102 de solapamiento</strong>, tokens de <code>BAAI/bge-m3</code> → 948 fragmentos</td>
+</tr>
+<tr>
+<td>Embeddings</td>
+<td>fila <strong><code>embed_local_multilingue</code></strong> (BAAI/bge-m3, 1024 dim., 8192 tokens), <strong>verificada 2026-08-27</strong>, servida por <strong>Ollama local</strong> (no había VPN); verificada después contra la H200: mismo digest y métricas idénticas (Parte 1.3)</td>
+</tr>
+<tr>
+<td>Índice</td>
+<td>Qdrant 1.19.1 en contenedor, colección <code>taller2_bge_m3_local</code>, coseno</td>
+</tr>
+<tr>
+<td>Generación</td>
+<td>fila <strong><code>open_weight_pequeno</code></strong> (<code>qwen3:1.7b</code>) por Ollama local, temperatura 0</td>
+</tr>
+<tr>
+<td>Golden set</td>
+<td>10 preguntas: 4 simples, 3 multi-fragmento, 2 negativas, 1 adversarial (respondible)</td>
+</tr>
+<tr>
+<td>Baseline</td>
+<td>Hit Rate@3 <strong>0,875</strong>, @5 <strong>1,000</strong> · MRR <strong>0,750</strong> / <strong>0,781</strong> · abstención correcta <strong>1,000</strong> · indebida <strong>0,250</strong> / <strong>0,125</strong></td>
+</tr>
+<tr>
+<td>Extensión</td>
+<td>Opción B, <strong>híbrido BM25 + denso (RRF)</strong>: Hit Rate@3 <strong>1,000</strong> · MRR <strong>0,854</strong> · indebida <strong>0,125</strong> / <strong>0,000</strong></td>
+</tr>
+<tr>
+<td>Contraprueba</td>
+<td>generador <code>granite3.3</code> (H200) sobre la misma recuperación: abstención indebida <strong>0,000</strong> con los dos k, pero responde con conocimiento propio donde el contexto no alcanza (Parte 2.c)</td>
+</tr>
+<tr>
+<td>Costo</td>
+<td><strong>USD 0</strong>: ninguna llamada a API de pago</td>
+</tr>
+</tbody>
+</table>
+<h2>Arquitectura</h2>
+<pre><code> corpus/*.pdf (16)
+      │  pypdf, página por página, marcador [page=n]              ingestion.py
+      │  descarta documentos con &lt; 200 caracteres útiles (0.a)
+      ▼
+ texto ──► fragmentos de 512 tokens, solapamiento 102               ingestion.py
+      │    (tokenizador BAAI/bge-m3, el mismo que vectoriza)
+      ▼
+ bge-m3 en Ollama (truncate: false) ──► vectores de 1024          rag_pipeline.py
+      │
+      ▼
+ Qdrant (contenedor) · coseno · 948 puntos                         rag_pipeline.py
+      │
+ pregunta ──► vector ──► top-k denso ─────────────┐                rag_pipeline.py
+      │                                            ├─ RRF (k=60) ──► top-k   hibrido.py (Parte 3)
+      └──────► BM25 sobre los mismos 948 ─────────┘
+      ▼
+ prompt: solo el contexto + frase fija de abstención                rag_pipeline.py
+      ▼
+ qwen3:1.7b (Ollama) ──► respuesta ──► se_abstuvo()                 rag_pipeline.py
+      ▼
+ evaluation.py ──► resultados_k{3,5}.csv ──► tabla_metricas.py ──► resultados.csv
+</code></pre>
+<h2>Reproducibilidad</h2>
+<ul>
+<li><strong>Versiones:</strong> <code>requirements.txt</code> con las versiones exactas del entorno (Python 3.14.7).</li>
+<li><strong>Resultados crudos:</strong> <code>resultados.csv</code> tiene las 20 filas del baseline (10 preguntas × k = 3
+  y 5). <code>tabla_metricas.py</code> reconstruye la tabla de la Parte 2.b desde ese archivo y comprueba
+  que coincide con lo que reportó el evaluador.</li>
+<li><strong>Registro de corridas:</strong> cada corrida escribe en <code>salidas/&lt;modelo&gt;@&lt;host&gt;/</code> y añade una fila
+  a <code>experimentos.csv</code>. <code>EXPERIMENTOS.md</code> tiene el prefijo exacto de cada configuración y la
+  tabla de todas las corridas, incluida la repetición del baseline en la H200.
+  <code>comparar_configuraciones.py</code> compara las dos configuraciones (Parte 1.3).</li>
+<li><strong>Credenciales:</strong> ninguna clave en el repositorio. <code>.env</code> está en <code>.gitignore</code> y no está
+  versionado, y una búsqueda del patrón de claves de OpenAI (<code>sk-…</code>) en los archivos
+  versionados no encuentra nada.</li>
+</ul>
+<p>Prefijo de todas las corridas del baseline:</p>
+<pre><code class="language-bash">export H200_EMBED_URL=http://localhost:11434 EMBEDDING_BACKEND=h200 OPENAI_API_KEY= \
+       GENERATION_MODEL=qwen3:1.7b QDRANT_COLLECTION=taller2_bge_m3_local
+</code></pre>
+<h2>Presupuesto</h2>
+<p>No se gastó nada. Los embeddings (bge-m3) y la generación (<code>qwen3:1.7b</code>) corrieron en la Mac,
+por Ollama. Se intentó la ruta de OpenAI (<code>embed_api_economico</code> para embeddings y
+<code>propietario_economico</code>, <code>gpt-4o-mini</code>, para generar), pero la clave fue rechazada con un 401
+antes de cualquier llamada facturable. Con esa ruta, el costo estimado de indexar habría sido
+de unos USD 0,01: 473 866 tokens a USD 0,02 por millón, precio de la fila verificado el
+2026-08-27. RAGAS (Opción D) no se corrió, así que no hay estimación de llamadas de juez.</p>
+<p>Tiempos en la Mac: indexar 948 fragmentos, 136,6 s; cada evaluación completa (10 preguntas,
+con generación), alrededor de 1,5 min por valor de k.</p>
+<h1 class="parte">Parte 0 — Tres fallas que no fallan</h1>
+<p>Todo corre sobre <code>ejemplos/</code> con <code>EMBEDDING_BACKEND=local QDRANT_URL=":memory:"</code>, es decir,
+con el MiniLM multilingüe (<code>embed_notebook_s2</code>, tope de 128 tokens, verificado 2026-08-27),
+sin clave, sin VPN y sin Docker. No se modificó nada del andamiaje.</p>
+<p>Para reproducir:</p>
+<pre><code class="language-bash">EMBEDDING_BACKEND=local QDRANT_URL=&quot;:memory:&quot; CORPUS_DIR=ejemplos \
+  python rag_pipeline.py &quot;¿cuántos días de vacaciones puedo transferir?&quot;   # 0.a
+EMBEDDING_BACKEND=local QDRANT_URL=&quot;:memory:&quot; python parte0.py             # 0.a (contrafactual), 0.b, 0.c
+</code></pre>
+<p>Las salidas crudas están en <code>salidas/parte0*.txt</code>.</p>
+<h2>0.a — El PDF que se indexa vacío</h2>
+<p>Salida cruda de la ingesta (<code>salidas/parte0a_ingesta.txt</code>, sin el prompt que imprime el modo
+inspección):</p>
+<pre><code>AVISO ingesta: instructivo_escaneado.pdf: 0 caracteres útiles en 2 página(s). ¿Escaneado o fotografiado? NO se indexa: sin texto no hay nada que recuperar (OCR aparte).
+embeddings: local · sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 · tope 128 tokens · Qdrant :memory:
+ingesta: nimbus_gastos.md: 1 página(s), 294 caracteres útiles → 1 fragmento(s)
+ingesta: nimbus_remoto.md: 1 página(s), 296 caracteres útiles → 1 fragmento(s)
+ingesta: nimbus_vacaciones.md: 1 página(s), 363 caracteres útiles → 1 fragmento(s)
+indexados 3 fragmentos de 3 documento(s)
+</code></pre>
+<p>Lo que habría pasado sin la comprobación (<code>salidas/parte0a_sin_comprobacion.txt</code>):</p>
+<pre><code>documento: instructivo_escaneado.pdf · 2 página(s) · useful_chars=0 · parece_escaneado=True
+texto extraído por pypdf (repr): '\n[page=1]\n\n\n[page=2]\n'
+fragmentos que produciría la fragmentación sin la comprobación: 1
+  [0] '[page=1] [page=2]' · caracteres útiles=0 (el filtro por fragmento exige 20)
+</code></pre>
+<p><code>load_corpus</code> cuenta los caracteres alfanuméricos de cada documento sin contar los marcadores
+<code>[page=n]</code> que la propia ingesta añade, y si quedan menos de 200 (<code>MIN_CARACTERES_UTILES</code>)
+avisa y salta el documento: el instructivo escaneado tiene <strong>0</strong>. Sin esa comprobación, pypdf
+devuelve un texto vacío por página sin lanzar ninguna excepción, y la fragmentación convierte
+el documento en un único fragmento <code>'[page=1] [page=2]'</code> que no tiene ni una palabra del
+instructivo, como muestra el contrafactual de abajo.</p>
+<p>Hay un detalle que se vio al correr el contrafactual: el andamiaje trae una segunda red,
+<code>MIN_CARACTERES_FRAGMENTO = 20</code>, que descarta fragmentos con menos de 20 caracteres útiles.
+Ese filtro también habría botado el <code>'[page=1] [page=2]'</code>, pero en silencio: el documento
+desaparecería sin aviso. La diferencia con la comprobación por documento es justamente el
+aviso. Con un PDF que tuviera, por ejemplo, una portada con texto y el resto escaneado, ninguno
+de los dos filtros saltaría, y el documento quedaría indexado a medias.</p>
+<p><strong>El corpus real no trae ningún documento así.</strong> <code>salidas/corpus_verificacion.txt</code> (rama
+<code>step-1-corpus</code>) muestra 16 documentos, todos indexables, y 0 páginas con menos de 50
+caracteres útiles.</p>
+<h2>0.b — El fragmento que se corta a 128</h2>
+<p>Salida cruda (<code>salidas/parte0b_truncado.txt</code>):</p>
+<pre><code>aviso de la ingesta:
+  AVISO ingesta: chunk_tokens=900 supera el tope del modelo (128 tokens): lo que pase de 126 tokens no llega al índice —el MiniLM lo trunca en silencio; la H200 rechaza la petición—.
+
+texto: salidas/parte0b_texto.txt (900 palabras)
+tokens del texto (tokenizador del modelo, sin especiales): 1463
+tope del modelo (max_seq_length): 128
+fracción que llega al vector: 8.6% (126 tokens de contenido + 2 especiales)
+coseno(vector del texto entero, vector del texto recortado a 128): 1.000000
+</code></pre>
+<p>El texto son las primeras 900 palabras que pypdf extrae de Vaswani et al. (2017). Esas 900
+palabras son <strong>1463 tokens</strong> para el tokenizador del modelo, y el tope es <strong>128</strong>. El coseno
+entre el vector del texto entero y el del texto recortado es <strong>1.000000</strong>, o sea, son el mismo
+vector: el 91,4 % del texto no influye en nada de lo que se indexa. Un matiz: el tokenizador
+sí imprimió un aviso (<code>1463 &gt; 128</code>) cuando se contaron los tokens, pero <code>encode</code> no dice nada.
+Quien solo llama a <code>encode</code>, que es lo que hace el pipeline, no se entera.</p>
+<p><strong><code>chunk_tokens</code> para la Parte 1: 512, con <code>overlap_tokens</code> de 102 (un quinto).</strong> Que bge-m3
+admita 8192 tokens solo dice que un fragmento de 8192 no se trunca; no dice que sea útil. Un
+fragmento así equivaldría a varias páginas de un paper mezclando secciones, y su vector sería
+un promedio de temas distintos que no se parecería mucho a ninguna pregunta concreta. Con la
+proporción que salió aquí, de 1463/900 ≈ 1,6 tokens por palabra (el tokenizador del MiniLM y el
+de bge-m3 vienen ambos de XLM-RoBERTa, así que la proporción debería ser parecida, aunque no se
+verificó), 512 tokens son unas 315 palabras: más o menos dos o tres párrafos de un paper, que es
+la escala a la que suele estar la respuesta de una pregunta simple. Este valor es provisional;
+en la Parte 1 se revisa contra la distribución real de largos de párrafo del corpus.</p>
+<h2>0.c — El índice que no se queja</h2>
+<p>Salida cruda (<code>salidas/parte0c_indice_no_se_queja.txt</code>):</p>
+<pre><code>pregunta: ¿cuál es la política de mascotas?
+  1. 0.058  nimbus_gastos.md / nimbus_gastos-0000  # Política de reembolso de gastos de NimbusSoft Los gastos de viaje se…
+  2. 0.032  nimbus_remoto.md / nimbus_remoto-0000  # Política de trabajo remoto de NimbusSoft El trabajo remoto está perm…
+  3. -0.033  nimbus_vacaciones.md / nimbus_vacaciones-0000  # Política de vacaciones de NimbusSoft Los empleados a tiempo completo…
+
+pregunta: ¿qué exige el instructivo de prácticas de campo sobre el seguro de accidentes?
+  1. 0.229  nimbus_remoto.md / nimbus_remoto-0000  # Política de trabajo remoto de NimbusSoft El trabajo remoto está perm…
+  2. 0.171  nimbus_gastos.md / nimbus_gastos-0000  # Política de reembolso de gastos de NimbusSoft Los gastos de viaje se…
+  3. 0.099  nimbus_vacaciones.md / nimbus_vacaciones-0000  # Política de vacaciones de NimbusSoft Los empleados a tiempo completo…
+</code></pre>
+<p>Ninguna de las dos preguntas tiene respuesta en el índice, y el índice devuelve igual tres
+vecinos con puntaje, sin error ni aviso. El Hit Rate no puede detectar esto porque solo mide si
+el documento fuente aparece entre los k recuperados. En la primera pregunta no hay documento
+fuente; en la segunda, el documento fuente nunca entró al índice (0.a). En ninguno de los dos
+casos hay un «acierto» que pueda fallar. Por eso el golden set lleva preguntas negativas y se
+mide aparte si el sistema se abstiene.</p>
+<p>Hay que ser honesto con lo que se ve aquí: los puntajes no son de «aspecto sano» en el sentido
+literal. Para la pregunta de mascotas el mejor es 0,058, y un umbral sobre el puntaje podría
+filtrarla. La segunda pregunta ya es más delicada: 0,229 es el puntaje más alto de esta corrida,
+y justamente es la pregunta cuya respuesta existe en un documento que no se indexó. Con un
+corpus de 3 fragmentos cortos cualquier umbral sería arbitrario, y el pipeline no tiene
+ninguno: pase lo que pase, entrega los k vecinos. En el corpus real conviene revisar si los
+puntajes de las negativas se separan o no de los de las respondibles; esa columna está en
+<code>resultados.csv</code> (<code>score_top1</code>).</p>
+<h1 class="parte">Parte 1 — Baseline RAG</h1>
+<p>Corpus: los 16 papers seminales de las semanas 1 y 2 (Opción B), <strong>en inglés</strong>, 440 páginas,
+todos con capa de texto (<code>salidas/corpus_verificacion.txt</code>).</p>
+<p>Embeddings: <strong>bge-m3</strong>, fila <code>embed_local_multilingue</code>, servido por un <strong>Ollama local</strong> y no por
+el de la H200, porque no se tenía la VPN. Después se comprobó que la H200 da los mismos
+resultados (el detalle está en 1.3). Generación: <strong><code>qwen3:1.7b</code></strong>
+por Ollama, fila <code>open_weight_pequeno</code>. Todo corre a costo cero. La configuración completa y la
+comparación con otras rutas están en <code>EXPERIMENTOS.md</code>.</p>
+<p>Para reproducir la Parte 1:</p>
+<pre><code class="language-bash">export H200_EMBED_URL=http://localhost:11434 EMBEDDING_BACKEND=h200 OPENAI_API_KEY= \
+       GENERATION_MODEL=qwen3:1.7b QDRANT_COLLECTION=taller2_bge_m3_local
+python inspeccion_ingesta.py 512 102   # 1.1 y 1.2: solo tokeniza
+python demo_top5.py                    # 1.3 a 1.5: indexa, top-5 y generación
+</code></pre>
+<p>Las salidas crudas están en <code>salidas/bge-m3@ollama-local/</code>.</p>
+<h2>1.1 Ingesta: qué se pierde</h2>
+<p>La ingesta es la de <code>ingestion.py</code> sin cambios: <code>pypdf</code> página por página, con el marcador
+<code>[page=n]</code>. <strong>No rechazó ningún documento:</strong> los 16 superan el umbral de
+<code>MIN_CARACTERES_UTILES</code> y ninguno tiene páginas vacías. Salida de <code>load_corpus</code>
+(<code>salidas/bge-m3@ollama-local/parte1_ingesta.txt</code>):</p>
+<pre><code>ingesta: bai-2022-constitutional-ai.pdf: 34 página(s), 94294 caracteres útiles → 75 fragmento(s)
+ingesta: blei-2003-lda.pdf: 30 página(s), 59953 caracteres útiles → 57 fragmento(s)
+ingesta: brown-2020-gpt3.pdf: 75 página(s), 186342 caracteres útiles → 156 fragmento(s)
+ingesta: doersch-2016-tutorial-vae.pdf: 23 página(s), 36740 caracteres útiles → 33 fragmento(s)
+ingesta: edge-2024-graphrag.pdf: 26 página(s), 70385 caracteres útiles → 60 fragmento(s)
+ingesta: es-2023-ragas.pdf: 8 página(s), 25583 caracteres útiles → 21 fragmento(s)
+ingesta: gao-2023-rag-survey.pdf: 21 página(s), 86641 caracteres útiles → 78 fragmento(s)
+ingesta: kingma-2013-vae.pdf: 14 página(s), 31786 caracteres útiles → 31 fragmento(s)
+ingesta: lewis-2020-rag.pdf: 19 página(s), 55094 caracteres útiles → 47 fragmento(s)
+ingesta: ng-jordan-2001-discriminative-vs-generative.pdf: 8 página(s), 18996 caracteres útiles → 19 fragmento(s)
+ingesta: ouyang-2022-instructgpt.pdf: 68 página(s), 143167 caracteres útiles → 118 fragmento(s)
+ingesta: rafailov-2023-dpo.pdf: 27 página(s), 71700 caracteres útiles → 66 fragmento(s)
+ingesta: rag-anything-2025.pdf: 18 página(s), 57304 caracteres útiles → 41 fragmento(s)
+ingesta: reimers-2019-sentence-bert.pdf: 11 página(s), 35133 caracteres útiles → 31 fragmento(s)
+ingesta: vaswani-2017-attention-is-all-you-need.pdf: 15 página(s), 31566 caracteres útiles → 25 fragmento(s)
+ingesta: wei-2022-chain-of-thought.pdf: 43 página(s), 105503 caracteres útiles → 90 fragmento(s)
+</code></pre>
+<p>Que todos tengan texto no quiere decir que el texto esté bien. Revisando muestras del texto
+extraído se ven cinco degradaciones, de más a menos grave para este corpus:</p>
+<ul>
+<li><strong>Tablas.</strong> Quedan como líneas de números sin columnas. En la Tabla 2 de Vaswani et al. la
+  fila <code>ByteNet [18] 23.75</code> ya no dice a qué columna pertenece el 23.75, porque las celdas vacías
+  desaparecen y lo de la derecha se corre. Los exponentes pierden el superíndice: <code>1.0· 1020</code> es
+  1,0·10²⁰. En Reimers y Gurevych la leyenda de la Tabla 1 aparece pegada al texto de la columna
+  vecina, y el contenido de la tabla queda en otra parte. Una pregunta cuya respuesta sea una
+  cifra de tabla es candidata a fallar en la generación aunque la recuperación acierte.</li>
+<li><strong>Ecuaciones.</strong> Se aplanan: <code>Attention(Q,K,V ) = softmax(QK T\n√dk\n)V</code>. El texto
+  alrededor sobrevive, la fórmula no se puede leer.</li>
+<li><strong>Palabras cortadas por el guion de fin de línea.</strong> <code>col-\nlection</code>, <code>neu-\ntral</code>. El conteo
+  va de 0 (Ng y Jordan) a 221 (Reimers y Gurevych), más alto en los papers a dos columnas. Para
+  el tokenizador de los embeddings no da lo mismo: <code>collection</code> es un token y <code>col- lection</code> son
+  cuatro. Además, una
+  <code>fragmento_esperado</code> del golden set que cruce una palabra cortada <strong>nunca va a coincidir</strong>,
+  porque el evaluador normaliza tildes y puntuación, pero no une palabras. Las frases del golden
+  set se eligen evitándolas.</li>
+<li><strong>Encabezados y pies repetidos.</strong> Solo aparecen en tres documentos: Blei et al.
+  (<code>LATENT DIRICHLET ALLOCATION</code>, <code>BLEI ,N G, AND JORDAN</code>), RAG-Anything y la plantilla de prompt
+  de RAGAS. Son pocos tokens, pero se repiten en muchos fragmentos del mismo documento.</li>
+<li><strong>Ligaduras</strong> (<code>ﬂexibility</code>, hasta 444 en Brown et al., y en 9 de los 16 documentos). Con
+  bge-m3 no pesan: se comprobó que su tokenizador las normaliza, y <code>ﬂexibility</code> y <code>flexibility</code>
+  dan los mismos tokens. Aquí el modelo de embeddings sí importa, porque <code>cl100k_base</code>, el
+  tokenizador de <code>text-embedding-3-small</code>, no normaliza Unicode: <code>flexibility</code> son 2 tokens y
+  <code>ﬂexibility</code> son 5, tres de ellos bytes sueltos de la ligadura. Con la ruta de OpenAI esta
+  degradación existiría. También pesaría en un BM25 que tokenice por espacios (Parte 3,
+  Opción B). El evaluador no se ve afectado, porque <code>_normalizar_texto</code> aplica NFKD y convierte
+  <code>ﬂ</code> en <code>fl</code>.</li>
+</ul>
+<p>Hay una observación que no es una degradación del parseo pero puede serlo de la recuperación:
+<strong>el 40,6 % de los tokens del corpus está después del último encabezado «References»</strong>, es
+decir, en la bibliografía y en los apéndices. En Wei et al. es el 75,1 %, casi todo apéndice con
+ejemplos de prompts; en Ouyang et al. y Rafailov et al., cerca del 60 %. En el baseline no se
+quitan: el baseline se mide como viene, y si en la Parte 2 aparecen fragmentos de bibliografía
+en el top-k (listas de títulos que comparten palabras con la pregunta), eso va al análisis de
+fallos como falla de ingesta.</p>
+<h2>1.2 Fragmentación</h2>
+<p><strong><code>chunk_tokens = 512</code>, <code>overlap_tokens = 102</code></strong>, en tokens del tokenizador de <code>BAAI/bge-m3</code>,
+de tamaño fijo, con la función <code>fixed_size_chunks_tokens</code> del andamiaje. Resultado:
+<strong>948 fragmentos</strong>, todos de 512 tokens salvo el último de cada documento (el más corto tiene
+61). Al re-tokenizar el texto decodificado, alguno llega a 513: la decodificación y
+re-codificación no es exacta en los bordes, y un token de diferencia contra un tope de 8192 no
+importa.</p>
+<p>La justificación es contra las preguntas, no contra el tope. Sobre este corpus, bge-m3 da una
+mediana de <strong>1,74 tokens por palabra</strong> y <strong>854 tokens por página</strong> (p25 635, p75 1071). Así que
+un fragmento de 512 tokens son <strong>unas 293 palabras, un 60 % de página</strong>: dos o tres párrafos de
+un paper. Las preguntas simples del golden set van a apuntar a una afirmación concreta (una
+cifra de un experimento, la definición de un método), que en un paper suele caber en un párrafo.
+Con 512 tokens, ese párrafo entra completo junto con algo de su contexto, y el vector del
+fragmento sigue siendo sobre un solo tema.</p>
+<p>Que bge-m3 admita 8192 tokens no cambia esto. Un fragmento de 8192 serían unas 10 páginas de
+paper, la mitad de un documento típico de este corpus, y su vector promediaría la introducción,
+el método y los resultados. Una pregunta específica se parecería poco a ese promedio. En el
+otro extremo, un fragmento de 128 como el del MiniLM de la Parte 0 serían unas 74 palabras, y la
+respuesta a una pregunta multi-fragmento quedaría repartida entre muchos pedazos que el top-5 no
+alcanza a juntar.</p>
+<p>El solapamiento es un quinto del fragmento, el valor por defecto del Lab-02: 102 tokens, unas 59
+palabras. Su función es que una idea que cae justo en el corte aparezca entera en alguno de los
+dos fragmentos vecinos. En 1.4 se ve funcionando: la frase «Training took 3.5 days on 8 P100
+GPUs» está completa en dos fragmentos seguidos de Vaswani et al. (<code>-0013</code> y <code>-0014</code>). Con un
+paso de 410 tokens, el solapamiento cuesta un 25 % más de fragmentos que sin él, algo que no
+importa a costo cero.</p>
+<p>Este valor es el del baseline y no se ajusta mirando el golden set. Si la Parte 2 muestra fallas
+de fragmentación (la respuesta cortada entre dos fragmentos, o fragmentos que mezclan temas), la
+Opción A de la Parte 3 es donde se prueba otra estrategia.</p>
+<h2>1.3 Embedding e indexación</h2>
+<p><strong>Fila de embeddings: <code>embed_local_multilingue</code></strong>. Es BAAI/bge-m3: 1024 dimensiones, tope de
+8192 tokens, multilingüe, USD 0 (costo cero real), <strong>verificada el 2026-08-27</strong> en la tabla
+semestral.</p>
+<p>El pipeline es el del andamiaje sin cambios de código (<code>EMBEDDING_BACKEND=h200</code>,
+<code>CodificadorH200</code>). Lo único distinto es <code>H200_EMBED_URL=http://localhost:11434</code>: el cliente
+habla con un Ollama, y en vez del de la H200 se usó uno local con <code>bge-m3:latest</code>. Según
+<code>ollama show</code>, ese modelo tiene arquitectura BERT, 566,70 M de parámetros, embeddings de 1024,
+contexto de 8192 y pesos en F16, lo que coincide con bge-m3. Se mantiene <code>truncate: false</code>, así
+que un texto que no quepa da error en vez de recortarse. La ingesta fragmenta con el tokenizador
+de Hugging Face <code>BAAI/bge-m3</code>, el mismo que el pipeline usa contra la H200.</p>
+<p>Hay que ser claro en que <strong>no es la H200</strong>. El modelo es el mismo, pero cuando se corrió el
+baseline no se había verificado que el servidor de la H200 sirviera la misma versión ni la misma
+cuantización. Por eso la etiqueta de estas corridas es <code>bge-m3@ollama-local</code> y no <code>bge-m3@h200</code>.</p>
+<p><strong>Después se verificó contra la H200</strong> (2026-09-28, ya con VPN). Se repitieron el índice, la
+evaluación 2.b y el híbrido de la Parte 3 con embeddings de la H200, en su propia colección
+(<code>taller2_bge_m3_h200</code>) y con el mismo generador local, para que lo único que cambiara fuera el
+servidor de embeddings. <code>comparar_configuraciones.py</code> deja el resultado en
+<code>salidas/comparacion_configuraciones.md</code>. Los dos Ollama sirven <code>bge-m3:latest</code> con el mismo
+digest (<code>7907646426070047…</code>, F16, 566,70 M de parámetros), o sea los mismos pesos byte a byte.
+Con 40 fragmentos del índice y las 10 preguntas, el coseno entre el vector local y el de la H200
+nunca baja de 0,999730. Hit Rate, MRR y las dos tasas de abstención salen idénticos, denso e
+híbrido, con k = 3 y k = 5. Con k = 3 el top-k coincide en las 10 preguntas, en el mismo orden.
+Con k = 5 hay una sola diferencia: en la pregunta 8 los cuatro primeros fragmentos son los
+mismos, pero el quinto puesto lo ocupa <code>ouyang-2022-instructgpt-0102</code> en local (0,5357) y
+<code>ouyang-2022-instructgpt-0084</code> en la H200 (0,5335). Es un empate casi exacto en el corte y no
+mueve ninguna métrica. Entonces las cifras de este informe, medidas en local, valen también para
+la H200, y no hizo falta rehacerlas. Antes se intentó la
+ruta de OpenAI (<code>embed_api_economico</code>), pero la clave fue rechazada (401) y no se indexó nada con
+ella. Un índice construido con un modelo solo se consulta con ese mismo modelo, así que cada
+configuración tiene su propia colección de Qdrant.</p>
+<p>Indexación en el <strong>Qdrant del contenedor</strong> (<code>http://localhost:6333</code>, Qdrant 1.19.1, colección
+<code>taller2_bge_m3_local</code>), no en <code>:memory:</code>: <strong>948 puntos, dimensión 1024, distancia coseno</strong>,
+479 701 tokens vectorizados en <strong>136,6 s</strong> en la Mac.</p>
+<h2>1.4 Recuperación: top-5 para tres preguntas de prueba</h2>
+<p>Tres preguntas en inglés, como el corpus, que no son del golden set: sirven para ver que el
+pipeline funciona, no para medirlo. Salida cruda (<code>salidas/bge-m3@ollama-local/parte1_top5.txt</code>):</p>
+<pre><code>embeddings: h200 · BAAI/bge-m3 · tope 8192 · Qdrant http://localhost:6333 · colección taller2_bge_m3_local
+indexando 948 fragmentos (512/102) · 479701 tokens · costo estimado USD 0.0000
+indexados: 948 puntos · dimensión 1024 · distancia Cosine · 136.6 s
+
+[1] How long did it take to train the big Transformer model, and on what hardware?
+  1. 0.630  vaswani-2017-attention-is-all-you-need.pdf / vaswani-2017-attention-is-all-you-need-0014  previously reported models (including ensembles) by more than 2.0 BLEU, establishing a new…
+  2. 0.569  vaswani-2017-attention-is-all-you-need.pdf / vaswani-2017-attention-is-all-you-need-0013  s than previous state-of-the-art models on the English-to-German and English-to-French new…
+  3. 0.567  vaswani-2017-attention-is-all-you-need.pdf / vaswani-2017-attention-is-all-you-need-0012  ching We trained on the standard WMT 2014 English-German dataset consisting of about 4.5 m…
+  4. 0.536  vaswani-2017-attention-is-all-you-need.pdf / vaswani-2017-attention-is-all-you-need-0016  too many heads. In Table 3 rows (B), we observe that reducing the attention key size dk hu…
+  5. 0.526  vaswani-2017-attention-is-all-you-need.pdf / vaswani-2017-attention-is-all-you-need-0002  they generate a sequence of hidden statesht, as a function of the previous hidden stateht−…
+  respuesta [ollama:qwen3:1.7b] abstuvo=False:
+    La entrenación del modelo Transformer grande se llevó a cabo en 3.5 días utilizando 8 unidades de procesamiento gráfico P100.
+
+[2] Why does DPO not need to train an explicit reward model?
+  1. 0.686  rafailov-2023-dpo.pdf / rafailov-2023-dpo-0003  reward maximization with a KL-divergence constraint) but is simple to implement and straig…
+  2. 0.640  rafailov-2023-dpo.pdf / rafailov-2023-dpo-0002  , and then use RL to find a policy that maximizes the learned reward. In contrast, DPO dir…
+  3. 0.638  rafailov-2023-dpo.pdf / rafailov-2023-dpo-0012  the DPO method, provide theoretical backing, and relate advantages of DPO to issues with a…
+  4. 0.633  rafailov-2023-dpo.pdf / rafailov-2023-dpo-0000  [page=1] Direct Preference Optimization: Your Language Model is Secretly a Reward Model Ra…
+  5. 0.627  rafailov-2023-dpo.pdf / rafailov-2023-dpo-0025  about as often as humans agree with each other, suggesting that GPT-4 is a reason- able pr…
+  respuesta [ollama:qwen3:1.7b] abstuvo=False:
+    DPO no necesita entrenar un modelo de recompensa explícito porque utiliza un cambio de variables para definir la pérdida de preferencias directamente como una función del política, evitando la necesidad de un modelo de recompensa separado. Esto permite optimizar la política directamente mediante un objetivo de entropía binaria simple, sin recurrir a métodos de aprendizaje por reacción (RL) o a un modelo de recompensa explícito.
+
+[3] Which quality aspects of a RAG answer does RAGAS evaluate without human references?
+  1. 0.634  es-2023-ragas.pdf / es-2023-ragas-0012  we observed that ChatGPT often struggles with the task of selecting the sen- tences from t…
+  2. 0.609  es-2023-ragas.pdf / es-2023-ragas-0000  [page=1] Ragas: Automated Evaluation of Retrieval Augmented Generation Shahul Es†, Jithin …
+  3. 0.609  gao-2023-rag-survey.pdf / gao-2023-rag-survey-0035  quiry. 2) Required Abilities: RAG evaluation also encompasses four abilities indicative of…
+  4. 0.606  es-2023-ragas.pdf / es-2023-ragas-0005  ailability of one or more reference answers. For instance, BERTScore (Zhang et al., 2020) …
+  5. 0.602  gao-2023-rag-survey.pdf / gao-2023-rag-survey-0040  of noise or contradictory information during retrieval can detrimentally affect RAG’s outp…
+  respuesta [ollama:qwen3:1.7b] abstuvo=False:
+    The quality aspects of a RAG answer that RAGAS evaluates without human references are: **Context Relevance**, **Faithfulness**, and **Answer Relevance**.
+</code></pre>
+<p>Lo que se ve:</p>
+<ul>
+<li><strong>Pregunta 1:</strong> los cinco vecinos son de Vaswani et al. La respuesta («Training took 3.5 days
+  on 8 P100 GPUs») está en los fragmentos de las posiciones 1 y 2, y la sección «Hardware and
+  Schedule» en la 3.</li>
+<li><strong>Pregunta 2:</strong> los cinco son de Rafailov et al.</li>
+<li><strong>Pregunta 3:</strong> mezcla dos documentos. RAGAS ocupa las posiciones 1, 2 y 4, y el survey de Gao
+  et al. las 3 y 5. Tiene sentido, porque el survey resume RAGAS en su sección de evaluación.</li>
+<li><strong>Los puntajes están todos entre 0,52 y 0,69</strong>, con poca separación entre el primero y el
+  quinto (0,630 contra 0,526 en la pregunta 1). Es lo que la Parte 0.c ya mostró: el puntaje
+  solo ordena, no dice si la respuesta está. Habrá que ver en la Parte 2 si las negativas quedan
+  en ese mismo rango.</li>
+</ul>
+<h2>1.5 Generación</h2>
+<p>Generador: <strong><code>qwen3:1.7b</code> por Ollama local</strong> (fila <code>open_weight_pequeno</code>), con temperatura 0,
+porque la clave de OpenAI no funcionó. El prompt y la frase de abstención son los del andamiaje
+sin tocar. <code>ABSTENCION</code> sigue siendo «El corpus no contiene información suficiente.», la misma
+en el prompt, en el golden set y en el detector. <code>OPENAI_API_KEY=</code> se deja vacía a propósito,
+porque <code>generate</code> prefiere OpenAI apenas hay una clave, aunque sea inválida.</p>
+<p>Las tres respuestas son correctas contra el paper. Hay dos detalles que conviene anotar para la
+Parte 2:</p>
+<ul>
+<li><strong>Idioma.</strong> El modelo responde en español en las preguntas 1 y 2, porque el prompt está en
+  español, y en inglés en la 3. No es un error, pero una respuesta esperada en inglés comparada
+  por cadena no coincidiría. Además, si el modelo se abstuviera en inglés, el detector (que busca
+  la frase en español) no lo vería. Hay que revisarlo en la Parte 2.b.</li>
+<li><strong>Pequeños errores de traducción</strong> propios de un modelo de 1,7 B. En la pregunta 2 escribe
+  «aprendizaje por reacción (RL)» en vez de «aprendizaje por refuerzo». El contenido está bien.</li>
+</ul>
+<h1 class="parte">Parte 2 — Evaluación con golden set</h1>
+<p>Configuración: la del baseline de la Parte 1, <code>bge-m3@ollama-local</code> (fila
+<code>embed_local_multilingue</code>, verificada 2026-08-27), 512/102, 948 fragmentos, generación con
+<code>qwen3:1.7b</code> (<code>open_weight_pequeno</code>) por Ollama. Para reproducir:</p>
+<pre><code class="language-bash">export H200_EMBED_URL=http://localhost:11434 EMBEDDING_BACKEND=h200 OPENAI_API_KEY= \
+       GENERATION_MODEL=qwen3:1.7b QDRANT_COLLECTION=taller2_bge_m3_local
+python verificar_golden.py                    # 2.a: el golden set contra los fragmentos reales
+python evaluation.py --k 3 --sin-indexar      # 2.b (reusa el índice de la Parte 1)
+python evaluation.py --k 5 --sin-indexar
+python tabla_metricas.py --entregable         # tabla desde los CSV + ./resultados.csv
+python analisis_fallos.py                     # 2.c: evidencia de los peores casos
+</code></pre>
+<p>Cambio declarado sobre el andamiaje: <code>evaluation.py</code> ahora escribe un CSV por configuración y
+por k (antes la corrida con k = 5 pisaba la de k = 3) y guarda la pregunta, la respuesta entera
+y los puntajes de todos los recuperados. Las métricas y sus definiciones no se tocaron.</p>
+<h2>2.a El golden set</h2>
+<p><code>golden_set.json</code>, 10 preguntas en inglés, como el corpus:</p>
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>tipo</th>
+<th>documento(s) fuente</th>
+<th>qué prueba</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>simple</td>
+<td>Reimers y Gurevych</td>
+<td>una cifra concreta (65 horas)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>simple</td>
+<td>Kingma y Welling</td>
+<td>un concepto (la reparametrización)</td>
+</tr>
+<tr>
+<td>3</td>
+<td>simple</td>
+<td>Edge et al.</td>
+<td>un nombre propio (Leiden)</td>
+</tr>
+<tr>
+<td>4</td>
+<td>simple</td>
+<td>Wei et al.</td>
+<td>una cifra con un distractor cerca (100B contra 540B)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>multi-fragmento</td>
+<td>Lewis et al. + RAGAS</td>
+<td>combinar <strong>dos documentos</strong></td>
+</tr>
+<tr>
+<td>6</td>
+<td>multi-fragmento</td>
+<td>Ouyang et al. + Rafailov et al.</td>
+<td>combinar <strong>dos documentos</strong></td>
+</tr>
+<tr>
+<td>7</td>
+<td>multi-fragmento</td>
+<td>Edge et al.</td>
+<td>combinar <strong>dos secciones</strong> del mismo documento</td>
+</tr>
+<tr>
+<td>8</td>
+<td>negativa</td>
+<td>—</td>
+<td>tasa de aprendizaje de Llama 2</td>
+</tr>
+<tr>
+<td>9</td>
+<td>negativa</td>
+<td>—</td>
+<td>número de parámetros de GPT-4</td>
+</tr>
+<tr>
+<td>10</td>
+<td>adversarial</td>
+<td>Vaswani et al.</td>
+<td>una instrucción de ignorar el contexto</td>
+</tr>
+</tbody>
+</table>
+<p>Algunas decisiones de diseño:</p>
+<ul>
+<li><strong>Anotación por documento y frase literal</strong>, no por <code>chunk_id</code>, para que la Opción A de la
+  Parte 3 pueda re-fragmentar sin invalidar nada. <code>verificar_golden.py</code> comprueba contra los
+  948 fragmentos reales que cada frase cabe entera en al menos un fragmento de su documento
+  (entre 1 y 4, según la frase), y que ninguna cruza una palabra cortada por guion. Esto último
+  hizo falta de verdad: la frase natural de la pregunta 1 («most similar pair») aparece en el
+  PDF como <code>sim- ilar</code> y no habría coincidido nunca.</li>
+<li><strong>Preguntas parafraseadas.</strong> El mismo script mide cuántas palabras de contenido comparte cada
+  pregunta con su frase esperada: 0 de 2, 1 de 5, 2 de 5, 1 de 7 y 2 de 4. La recuperación no
+  puede ganar por copiar palabras.</li>
+<li><strong>Negativas cercanas, no absurdas.</strong> Una pregunta sobre recetas se abstendría sola. Las dos
+  negativas nombran modelos que <strong>sí aparecen</strong> en el corpus: Llama 2 en la bibliografía de
+  Edge et al., y GPT-4 en 49 fragmentos (como juez en Rafailov et al. y en bibliografías). Pero
+  ningún fragmento contiene la respuesta. Se comprobó buscando co-apariciones: «gpt 4» con
+  «trillion» solo aparece en una bibliografía, y «llama» con «learning rate» en ninguna parte.
+  La 9, además, tienta al generador a responder con lo que «sabe».</li>
+<li><strong>La adversarial es respondible:</strong> tiene documento fuente y cuenta en el Hit Rate y el MRR. Se
+  decidió así porque lo que interesa es que el sistema <strong>no obedezca</strong> la instrucción metida en la
+  pregunta y responda desde el contexto. Si se hubiera dejado sin fuente, se estaría premiando
+  que se abstenga ante una pregunta que sí tiene respuesta.</li>
+<li><strong>Limitación que se asume:</strong> en las multi-fragmento no se pone frase, así que el acierto es a
+  nivel de documento, y basta un fragmento de <em>uno</em> de los dos documentos. Eso es generoso, y en
+  la 2.c se ve el costo: la pregunta 5 cuenta como acierto con k = 3 aunque no se recuperó nada
+  de Lewis et al.</li>
+</ul>
+<h2>2.b Métricas</h2>
+<p>Tabla reconstruida desde los CSV crudos por <code>tabla_metricas.py</code>, que coincide con lo que reportó
+<code>evaluation.py</code> (<code>salidas/bge-m3@ollama-local/tabla_metricas.md</code>):</p>
+<table>
+<thead>
+<tr>
+<th>k</th>
+<th>preguntas</th>
+<th>respondibles</th>
+<th>negativas</th>
+<th>Hit Rate@k</th>
+<th>MRR</th>
+<th>abstención correcta</th>
+<th>abstención indebida</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3</td>
+<td>10</td>
+<td>8</td>
+<td>2</td>
+<td><strong>0.875</strong></td>
+<td><strong>0.750</strong></td>
+<td><strong>1.000</strong></td>
+<td><strong>0.250</strong></td>
+</tr>
+<tr>
+<td>5</td>
+<td>10</td>
+<td>8</td>
+<td>2</td>
+<td><strong>1.000</strong></td>
+<td><strong>0.781</strong></td>
+<td><strong>1.000</strong></td>
+<td><strong>0.125</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Por tipo:</p>
+<table>
+<thead>
+<tr>
+<th>k</th>
+<th>tipo</th>
+<th>n</th>
+<th>Hit Rate</th>
+<th>MRR</th>
+<th>se abstuvo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3</td>
+<td>simple</td>
+<td>4</td>
+<td>0.750</td>
+<td>0.625</td>
+<td>0.000</td>
+</tr>
+<tr>
+<td>3</td>
+<td>multi-chunk</td>
+<td>3</td>
+<td>1.000</td>
+<td>1.000</td>
+<td>0.667</td>
+</tr>
+<tr>
+<td>3</td>
+<td>adversarial</td>
+<td>1</td>
+<td>1.000</td>
+<td>0.500</td>
+<td>0.000</td>
+</tr>
+<tr>
+<td>3</td>
+<td>negativo</td>
+<td>2</td>
+<td>—</td>
+<td>—</td>
+<td>1.000</td>
+</tr>
+<tr>
+<td>5</td>
+<td>simple</td>
+<td>4</td>
+<td>1.000</td>
+<td>0.688</td>
+<td>0.000</td>
+</tr>
+<tr>
+<td>5</td>
+<td>multi-chunk</td>
+<td>3</td>
+<td>1.000</td>
+<td>1.000</td>
+<td>0.333</td>
+</tr>
+<tr>
+<td>5</td>
+<td>adversarial</td>
+<td>1</td>
+<td>1.000</td>
+<td>0.500</td>
+<td>0.000</td>
+</tr>
+<tr>
+<td>5</td>
+<td>negativo</td>
+<td>2</td>
+<td>—</td>
+<td>—</td>
+<td>1.000</td>
+</tr>
+</tbody>
+</table>
+<p>Cómo se leen:</p>
+<ul>
+<li><strong>Hit Rate y MRR, solo sobre las 8 respondibles.</strong> Pasar de k = 3 a k = 5 sube el Hit Rate de
+  0,875 a 1,000, porque la única pregunta sin acierto (la 3) lo encuentra en la posición 4. El MRR
+  casi no se mueve (0,750 → 0,781): ese acierto nuevo entra con un recíproco de 1/4. Lo mismo
+  muestra que el MRR <strong>no es la posición promedio</strong>. Con k = 5, las posiciones del primer acierto
+  son 1, 1, 4, 2, 1, 1, 1, 2, con media 1,625. Su inverso sería 0,615, mientras que el MRR, que
+  promedia los recíprocos, da 0,781. Una sola pregunta en la posición 4 arrastra la media de
+  posiciones mucho más de lo que baja el MRR.</li>
+<li><strong>Dos tasas de abstención, no una.</strong> La correcta es 1,000 con los dos k: el sistema se abstuvo
+  en las dos negativas. Solo con eso parecería perfecto, pero la indebida es 0,250 con k = 3 y
+  0,125 con k = 5: también se abstuvo en preguntas que tenían respuesta, 2 de 8 y 1 de 8. Un
+  sistema que siempre se abstiene sacaría 1,000 en la primera y 1,000 en la segunda. Por eso las
+  dos van juntas.</li>
+<li><strong>Todas las abstenciones son la frase exacta</strong> («El corpus no contiene información
+  suficiente.»), así que el detector no se perdió ninguna. Se revisó a mano porque <code>qwen3</code>
+  responde a veces en inglés (preguntas 5 y 7), y una abstención en inglés no la habría detectado.</li>
+<li><strong>Si las negativas entraran al Hit Rate</strong> como fallos, el techo con 2 negativas de 10 sería
+  0,80, y el 1,000 de k = 5 se reportaría como 0,800 sin que el sistema hubiera cambiado. La
+  métrica correcta para ellas es la abstención.</li>
+<li><strong>Con 8 respondibles, cada pregunta mueve el Hit Rate en 0,125.</strong> Las diferencias entre k son
+  una o dos preguntas y no permiten generalizar mucho más allá de este golden set.</li>
+</ul>
+<h2>2.c Los tres peores casos</h2>
+<p>La evidencia completa (ingesta, recuperados con puntaje y qué palabras clave de la respuesta
+esperada tiene cada uno, y la respuesta) está en <code>salidas/bge-m3@ollama-local/fallos_evidencia.txt</code>.</p>
+<h3>Caso 1 — Pregunta 6 (InstructGPT contra DPO): <strong>generación / prompt</strong></h3>
+<p>Se abstiene con k = 3 <strong>y</strong> con k = 5, aunque la métrica dice acierto en la posición 1 con los
+dos k. Con k = 5 los recuperados son:</p>
+<pre><code>1. 0.660  rafailov-2023-dpo-0025  contiene: ['reinforcement learning', 'PPO']
+2. 0.658  rafailov-2023-dpo-0003  contiene: ['reward model', 'PPO', 'binary cross entropy', 'change of variables']
+3. 0.657  rafailov-2023-dpo-0019  contiene: ['reward model', 'PPO']
+4. 0.651  rafailov-2023-dpo-0021  contiene: ['PPO']
+5. 0.650  ouyang-2022-instructgpt-0006  contiene: —
+respuesta: El corpus no contiene información suficiente.
+</code></pre>
+<p>El fragmento <code>rafailov-2023-dpo-0003</code> tiene <strong>todas</strong> las piezas de la respuesta: el paper de DPO
+describe el pipeline RLHF que reemplaza (modelo de recompensa + PPO) y su propia pérdida
+(cambio de variables, entropía cruzada binaria). La recuperación cumplió, y la ingesta de los
+dos documentos no tiene nada raro (118 y 66 fragmentos). La falla está en la generación: el
+prompt obliga a usar solo el contexto, la pregunta nombra «InstructGPT», y ningún fragmento del
+top-5 lo nombra así. Un modelo de 1,7 B parece leer eso como «no está» y se abstiene. Es una
+abstención indebida que el Hit Rate no ve.</p>
+<h3>Caso 2 — Pregunta 5 (RAG contra RAGAS) con k = 3: <strong>recuperación</strong></h3>
+<pre><code>1. 0.741  es-2023-ragas-0002  contiene: ['faithfulness']
+2. 0.730  es-2023-ragas-0000  contiene: —
+3. 0.704  es-2023-ragas-0001  contiene: —
+respuesta: El corpus no contiene información suficiente.
+</code></pre>
+<p>Los tres vecinos son de RAGAS y <strong>ninguno de Lewis et al.</strong> La pregunta menciona los dos, pero
+el vector de la pregunta queda más cerca del paper que habla de evaluación. Con ese contexto,
+abstenerse no es un error del generador: la mitad de la respuesta no estaba. Es una falla de
+recuperación propia de las preguntas que necesitan dos documentos: el top-k lo acapara el
+documento más parecido. Con k = 5, Lewis et al. entra en la posición 4 y la respuesta sale
+correcta. Aun así, la métrica marca acierto en la posición 1 con los dos k, por la limitación
+declarada en la 2.a (acierto a nivel de documento). Es el caso más claro de un acierto que no es
+un acierto.</p>
+<h3>Caso 3 — Pregunta 4 (tamaño de modelo para chain-of-thought) con k = 5: <strong>generación</strong></h3>
+<pre><code>1. 0.735  wei-2022-chain-of-thought-0043  contiene: ['540B']
+2. 0.734  wei-2022-chain-of-thought-0009  contiene: ['100B', 'only yields performance gains when used with models of', '540B']
+3. 0.731  wei-2022-chain-of-thought-0010  contiene: ['540B']
+...
+respuesta: … el inicio de los beneficios se observa en modelos de tamaño similar a 540B parámetros.
+</code></pre>
+<p>La recuperación trae el fragmento correcto en la posición 2, y con k = 3 la respuesta era
+correcta («aproximadamente 100B»). Con k = 5 entran dos fragmentos más, ninguno con la respuesta,
+y el modelo cambia a «540B», la cifra que más se repite en el contexto (aparece en tres de los
+cinco fragmentos). Más contexto empeoró la respuesta, algo que ni el Hit Rate ni el MRR registran
+(los dos suben de k = 3 a k = 5). Es una falla de generación que el golden set solo detecta si se
+leen las respuestas. Por eso el CSV ahora guarda la respuesta entera.</p>
+<h3>Una falla del verificador, no del pipeline: la pregunta 3</h3>
+<p>Con k = 3 la pregunta 3 es el único fallo de recuperación de la tabla (posición «—»), pero la
+respuesta es correcta («Leiden (Traag et al., 2019)»). El fragmento en la posición 1,
+<code>edge-2024-graphrag-0011</code>, <strong>sí dice Leiden</strong>, pero con otras palabras, y la frase anotada
+(«Community detection (e.g., Leiden») está en los fragmentos 0007 y 0008, que no se recuperaron.
+La anotación era más estricta que la pregunta. No se corrige ahora, porque cambiar el golden set
+después de ver los resultados sería ajustar el verificador al sistema. Queda como candidata para
+una versión 1.1 del golden set, declarada como tal, y descuenta el 0,125 que separa el Hit Rate@3
+de 1,000.</p>
+<h3>Contraprueba: otro generador sobre la misma recuperación</h3>
+<p>Dos de los tres casos se atribuyeron a la generación, y eso se puede poner a prueba: si el
+diagnóstico es correcto, un generador más capaz sobre <strong>los mismos fragmentos</strong> debería
+arreglarlos. Se repitió la 2.b con <code>granite3.3</code> (8,2 B, en el Ollama de la H200), con el mismo
+prompt, temperatura 0 y el índice <code>bge-m3@h200</code>. Ese índice da el mismo top-k que el local en
+estas preguntas (Parte 1.3), así que lo único que cambia es el generador. Se eligió <code>granite3.3</code>
+porque fue el único generador que cargó en la H200 ese día; <code>qwen3:32b</code>, <code>gemma3:27b</code> y
+<code>gpt-oss:120b</code> hicieron caer el proceso de Ollama del servidor. Salida cruda en
+<code>salidas/bge-m3@h200/granite3.3/</code>.</p>
+<table>
+<thead>
+<tr>
+<th>generador</th>
+<th>k</th>
+<th>Hit Rate@k</th>
+<th>MRR</th>
+<th>abstención correcta</th>
+<th>abstención indebida</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>qwen3:1.7b</code></td>
+<td>3</td>
+<td>0,875</td>
+<td>0,750</td>
+<td>1,000</td>
+<td>0,250</td>
+</tr>
+<tr>
+<td><code>granite3.3</code></td>
+<td>3</td>
+<td>0,875</td>
+<td>0,750</td>
+<td>1,000</td>
+<td><strong>0,000</strong></td>
+</tr>
+<tr>
+<td><code>qwen3:1.7b</code></td>
+<td>5</td>
+<td>1,000</td>
+<td>0,781</td>
+<td>1,000</td>
+<td>0,125</td>
+</tr>
+<tr>
+<td><code>granite3.3</code></td>
+<td>5</td>
+<td>1,000</td>
+<td>0,781</td>
+<td>1,000</td>
+<td><strong>0,000</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Hit Rate y MRR no se mueven, como se esperaba, porque miden la recuperación. Lo que cambia son
+las respuestas. En el caso 1, <code>granite3.3</code> responde la pregunta 6 con los dos k usando lo que está
+en <code>rafailov-2023-dpo-0003</code> (modelo de recompensa + PPO contra la pérdida directa de DPO). En el
+caso 3 responde «aproximadamente 100 billion parameters» también con k = 5, sin dejarse arrastrar
+por el 540B. Eso respalda que esos dos casos eran fallas de generación y no de recuperación. La
+Parte 3 llega a lo mismo en la pregunta 6 por el otro lado: el híbrido trae un fragmento que
+nombra InstructGPT y <code>qwen3:1.7b</code> deja de abstenerse.</p>
+<p>Pero el 0,000 no es todo mejora, y hay que leer las respuestas para verlo. En la pregunta 5 con
+k = 3 (el caso 2) <code>granite3.3</code> también responde, y describe el RAG de Lewis et al. con detalle,
+aunque ninguno de los tres fragmentos recuperados es de ese paper. Esa parte sale de lo que el
+modelo ya sabía, no del contexto, o sea que incumple la instrucción del prompt. <code>qwen3:1.7b</code> se
+abstenía ahí, y según lo discutido en el caso 2 eso era lo correcto. El generador más grande
+tapa una falla de recuperación en vez de arreglarla, y la métrica lo cuenta como acierto. Algo
+parecido pasa en la negativa 9: <code>granite3.3</code> dice la frase de abstención, pero agrega que
+«GPT-4 es un modelo desarrollado por Microsoft», que es falso y no está en el corpus. Como
+<code>se_abstuvo</code> solo busca la frase, la cuenta como abstención correcta.</p>
+<p>La conclusión honesta es que el generador explica los casos 1 y 3, pero cambiarlo trae su propio
+problema: responde con conocimiento propio cuando el contexto no alcanza. Con 8 respondibles y
+dos modelos que difieren en tamaño <strong>y</strong> en familia, esto no dice cuál de los dos factores pesa
+más. Para medirlo bien haría falta una métrica de fidelidad al contexto, como la de RAGAS
+(Opción D), que no se corrió.</p>
+<h3>Las tres fallas silenciosas de la Parte 0, en este corpus</h3>
+<ul>
+<li><strong>PDF sin texto (0.a): no está.</strong> Los 16 documentos tienen capa de texto y 0 páginas vacías
+  (<code>salidas/corpus_verificacion.txt</code>), y la ingesta no rechazó ninguno.</li>
+<li><strong>Truncado (0.b): no está.</strong> Los fragmentos son de 512 tokens (el más largo re-tokenizado, 513)
+  contra un tope de 8192, y la ruta de Ollama pide <code>truncate: false</code>, así que un texto que no
+  cupiera daría error en vez de recortarse.</li>
+<li><strong>El índice que no se queja (0.c): sí está.</strong> Los mejores puntajes de las negativas (0,555 y
+  0,602) caen <strong>dentro</strong> del rango de los de las respondibles (0,548 a 0,741). La respondible 2
+  tiene un mejor puntaje más bajo que las dos negativas. Ningún umbral sobre el puntaje separaría
+  «hay respuesta» de «no la hay». Aquí lo que salvó la tasa de abstención correcta fue el
+  generador, no el índice.</li>
+</ul>
+<p>Además, la sospecha de la Parte 1 sobre la bibliografía (40,6 % de los tokens) no se confirmó.
+De los 50 fragmentos recuperados con k = 5, solo 1 tiene aspecto de bibliografía
+(<code>gao-2023-rag-survey-0074</code>), según una heurística simple que cuenta marcas de cita.</p>
+<h1 class="parte">Parte 3 — Extensión: búsqueda híbrida (Opción B)</h1>
+<h2>Hipótesis, declarada antes de implementar</h2>
+<p>Se elige por lo que midió la Parte 2, no por preferencia. El baseline denso tiene Hit Rate@5 de
+1,000 y MRR de 0,781, así que casi no le falta encontrar el documento. Los dos peores casos de la
+2.c apuntan a otra cosa: <strong>el recuperador denso ignora los nombres propios de la pregunta</strong>.</p>
+<ul>
+<li><strong>Pregunta 5</strong> («Lewis et al.'s RAG and the RAGAS framework…»): con k = 3, los tres vecinos son
+  de RAGAS y ninguno de Lewis et al. La pregunta nombra los dos trabajos, pero el vector la acerca
+  a uno solo.</li>
+<li><strong>Pregunta 6</strong> («InstructGPT and DPO…»): con k = 5, cuatro vecinos son de DPO y solo uno de
+  InstructGPT, en la posición 5, y ese no contiene ninguna palabra clave de la respuesta.</li>
+</ul>
+<p>BM25 puntúa por coincidencia exacta de términos, y «RAGAS», «Lewis», «InstructGPT» o «DPO» son
+términos raros en el corpus, con IDF alto. <strong>Lo que se espera corregir</strong> es que, al fusionar BM25
+con el denso por Reciprocal Rank Fusion, el documento que falta en las preguntas que nombran dos
+trabajos entre al top-k.</p>
+<p>Cómo se va a medir, con el mismo golden set, el mismo índice (948 fragmentos, 512/102) y el mismo
+generador:</p>
+<ol>
+<li><strong>Hit Rate@k y MRR</strong> para k = 3 y k = 5, contra el baseline, que es lo que pide el enunciado.</li>
+<li><strong>Cobertura de fuentes en las preguntas multi-documento (5 y 6):</strong> qué fracción de sus
+   documentos fuente aparece en el top-k. Es la medición directa de la hipótesis. El Hit Rate
+   no la ve, porque en esas preguntas el acierto es a nivel de documento y le basta uno de los
+   dos (limitación declarada en la 2.a).</li>
+<li><strong>Las dos tasas de abstención</strong>, porque en la pregunta 6 el baseline se abstuvo teniendo la
+   respuesta en el contexto. Si el contexto híbrido nombra InstructGPT, puede que ya no se
+   abstenga.</li>
+<li><strong>BM25 solo</strong>, como diagnóstico, para saber qué aporta cada lado de la fusión.</li>
+</ol>
+<p>Lo que <strong>no</strong> se espera corregir:</p>
+<ul>
+<li>la pregunta 4 con k = 5, que es una falla de generación (el modelo se distrae con «540B»);</li>
+<li>la pregunta 3, que es una falla de la anotación del golden set.</li>
+</ul>
+<p>Si la fusión no mejora nada, o empeora las preguntas simples (BM25 puede meter fragmentos que
+repiten palabras de la pregunta sin responderla), eso también es un resultado, y se explica.</p>
+<p>Parámetros fijados antes de medir: 20 candidatos de cada recuperador, RRF con la constante
+habitual k = 60, y tokenización de BM25 con la misma normalización del evaluador (minúsculas,
+NFKD, sin puntuación, lo que además deshace las ligaduras) y sin palabras vacías en inglés.</p>
+<h2>Implementación</h2>
+<p><code>hibrido.py</code>: <code>PipelineHibrido</code> hereda de <code>RagPipeline</code> y solo reemplaza <code>retrieve</code>.</p>
+<ul>
+<li><strong>BM25</strong> (<code>rank_bm25.BM25Okapi</code>) se construye sobre los <strong>mismos 948 fragmentos</strong> de la
+  colección de Qdrant: se leen del índice, no se re-fragmenta.</li>
+<li><strong>La fusión:</strong> el denso y BM25 dan 20 candidatos cada uno, y RRF suma <code>1/(60 + posición)</code> de
+  cada lista.</li>
+<li><strong>Lo que no cambia:</strong> el prompt, el generador (<code>qwen3:1.7b</code>), el detector de abstención y
+  <code>evaluate_retrieval</code>, que es la misma función del evaluador. La comparación cambia una sola
+  cosa.</li>
+<li><strong>Costo:</strong> USD 0, todo local. Las dos corridas híbridas (k = 3 y k = 5, con generación)
+  tardaron 2 min 40 s.</li>
+</ul>
+<pre><code class="language-bash">export H200_EMBED_URL=http://localhost:11434 EMBEDDING_BACKEND=h200 OPENAI_API_KEY= \
+       GENERATION_MODEL=qwen3:1.7b QDRANT_COLLECTION=taller2_bge_m3_local
+python hibrido.py --modo bm25 --sin-generar   # diagnóstico
+python hibrido.py --modo hibrido
+python comparar_extension.py                  # salidas/bge-m3@ollama-local/comparacion_extension.md
+</code></pre>
+<h2>Resultados</h2>
+<p>Desde los CSV crudos (<code>salidas/bge-m3@ollama-local/{,bm25/,hibrido/}resultados_k*.csv</code>):</p>
+<table>
+<thead>
+<tr>
+<th>variante</th>
+<th>k</th>
+<th>Hit Rate@k</th>
+<th>MRR</th>
+<th>abstención correcta</th>
+<th>abstención indebida</th>
+<th>cobertura P5</th>
+<th>cobertura P6</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>denso (baseline)</td>
+<td>3</td>
+<td>0.875</td>
+<td>0.750</td>
+<td>1.000</td>
+<td>0.250</td>
+<td>1/2</td>
+<td>1/2</td>
+</tr>
+<tr>
+<td>denso (baseline)</td>
+<td>5</td>
+<td>1.000</td>
+<td>0.781</td>
+<td>1.000</td>
+<td>0.125</td>
+<td>2/2</td>
+<td>2/2</td>
+</tr>
+<tr>
+<td>bm25 solo</td>
+<td>3</td>
+<td>0.875</td>
+<td>0.750</td>
+<td>sin medir</td>
+<td>sin medir</td>
+<td>1/2</td>
+<td>2/2</td>
+</tr>
+<tr>
+<td>bm25 solo</td>
+<td>5</td>
+<td>0.875</td>
+<td>0.750</td>
+<td>sin medir</td>
+<td>sin medir</td>
+<td>2/2</td>
+<td>2/2</td>
+</tr>
+<tr>
+<td><strong>híbrido (RRF)</strong></td>
+<td>3</td>
+<td><strong>1.000</strong></td>
+<td><strong>0.854</strong></td>
+<td>1.000</td>
+<td><strong>0.125</strong></td>
+<td>1/2</td>
+<td><strong>2/2</strong></td>
+</tr>
+<tr>
+<td><strong>híbrido (RRF)</strong></td>
+<td>5</td>
+<td>1.000</td>
+<td><strong>0.854</strong></td>
+<td>1.000</td>
+<td><strong>0.000</strong></td>
+<td>2/2</td>
+<td>2/2</td>
+</tr>
+</tbody>
+</table>
+<p>Posición del primer acierto por pregunta (— sin acierto; A = se abstuvo):</p>
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>tipo</th>
+<th>denso k=3</th>
+<th>denso k=5</th>
+<th>bm25 k=3</th>
+<th>bm25 k=5</th>
+<th>híbrido k=3</th>
+<th>híbrido k=5</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>simple</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+</tr>
+<tr>
+<td>2</td>
+<td>simple</td>
+<td>1</td>
+<td>1</td>
+<td>2</td>
+<td>2</td>
+<td>1</td>
+<td>1</td>
+</tr>
+<tr>
+<td>3</td>
+<td>simple</td>
+<td>—</td>
+<td>4</td>
+<td>2</td>
+<td>2</td>
+<td>2</td>
+<td>2</td>
+</tr>
+<tr>
+<td>4</td>
+<td>simple</td>
+<td>2</td>
+<td>2</td>
+<td>—</td>
+<td>—</td>
+<td>3</td>
+<td>3</td>
+</tr>
+<tr>
+<td>5</td>
+<td>multi-chunk</td>
+<td>1 A</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1 A</td>
+<td>1</td>
+</tr>
+<tr>
+<td>6</td>
+<td>multi-chunk</td>
+<td>1 A</td>
+<td>1 A</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+</tr>
+<tr>
+<td>7</td>
+<td>multi-chunk</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+</tr>
+<tr>
+<td>8</td>
+<td>negativo</td>
+<td>A</td>
+<td>A</td>
+<td>—</td>
+<td>—</td>
+<td>A</td>
+<td>A</td>
+</tr>
+<tr>
+<td>9</td>
+<td>negativo</td>
+<td>A</td>
+<td>A</td>
+<td>—</td>
+<td>—</td>
+<td>A</td>
+<td>A</td>
+</tr>
+<tr>
+<td>10</td>
+<td>adversarial</td>
+<td>2</td>
+<td>2</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<h2>Qué se confirmó y qué no</h2>
+<p><strong>La hipótesis se cumplió a medias: en la pregunta 6 sí, en la 5 no.</strong></p>
+<p><strong>Pregunta 6, se cumplió.</strong> Con k = 3, la cobertura pasa de 1/2 a 2/2: InstructGPT entra en la
+posición 2 (<code>rafailov, ouyang, rafailov</code>). Y el efecto llega a la generación: el baseline se
+abstenía con los dos k, y el híbrido ya no se abstiene con ninguno. Responde bien: DPO optimiza
+la política directamente con una pérdida de entropía cruzada binaria, sin aprendizaje por
+refuerzo, e InstructGPT entrena un modelo de recompensa y luego usa PPO. Esto es casi toda la
+baja de la abstención indebida (0,250 → 0,125 con k = 3 y 0,125 → 0,000 con k = 5). También
+refuerza la lectura de la 2.c: el modelo de 1,7 B se abstenía porque ningún fragmento nombraba
+«InstructGPT», no porque faltara la información.</p>
+<p><strong>Pregunta 5, no se cumplió.</strong> Con k = 3 la cobertura sigue en 1/2, los tres vecinos siguen
+siendo de RAGAS y el sistema se sigue absteniendo. Esta vez BM25 solo tampoco trae a Lewis et
+al. La razón está en el corpus, y es lo más interesante de esta parte. Se contó en cuántos
+fragmentos aparece cada término de la pregunta:</p>
+<table>
+<thead>
+<tr>
+<th>término</th>
+<th>fragmentos</th>
+<th>de qué documentos</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dpo</code></td>
+<td>37</td>
+<td>los 37 de Rafailov et al.</td>
+</tr>
+<tr>
+<td><code>instructgpt</code></td>
+<td>54</td>
+<td>43 de Ouyang et al., 10 de Bai et al., 1 de Wei et al.</td>
+</tr>
+<tr>
+<td><code>ragas</code></td>
+<td>12</td>
+<td>5 de RAGAS, 4 del survey de Gao et al., 3 de Edge et al.</td>
+</tr>
+<tr>
+<td><code>lewis</code></td>
+<td>29</td>
+<td><strong>solo 6 de Lewis et al.</strong>; 9 de Gao, 4 de Edge, 4 de RAGAS, 3 de Brown…</td>
+</tr>
+</tbody>
+</table>
+<p>«DPO» e «InstructGPT» son nombres de <strong>métodos</strong>, y el paper que los propone los repite en el
+cuerpo del texto. «Lewis» es el nombre de un <strong>autor</strong>. En su propio paper aparece en el fragmento
+0 (la línea de autores) y en cinco fragmentos de la segunda mitad (del 0026 al 0036, de 47), que
+por su posición parecen ser la bibliografía; no se revisó uno por uno. Donde más aparece es en las
+citas de <em>otros</em> papers («Lewis et al., 2020»). Para BM25, «lewis» apunta a los trabajos que citan el RAG, no al RAG. Así que la
+hipótesis era correcta para preguntas que nombran métodos y falsa para las que nombran autores.
+Eso no se sabía antes de medir.</p>
+<p><strong>De dónde sale la subida del MRR (0,750 → 0,854 con k = 3).</strong> No de las preguntas de la
+hipótesis, que ya tenían su primer acierto en la posición 1, sino de dos simples:</p>
+<ul>
+<li><strong>Pregunta 3:</strong> de «—» a 2. Hay que leerla con cuidado. La pregunta comparte «community» y
+  «detection» con la frase anotada (el solapamiento de 2 de 5 medido en la 2.a), y BM25 premia
+  justo eso. Parte de la mejora es coincidencia de palabras con la anotación, y la respuesta ya
+  era correcta con el baseline (2.c).</li>
+<li><strong>Pregunta 10</strong> (adversarial): de 2 a 1, porque «dropout rate» y «base» coinciden literalmente
+  con el fragmento de Vaswani et al.</li>
+</ul>
+<p><strong>Lo que empeoró.</strong> La pregunta 4 baja de la posición 2 a la 3. BM25 solo no la encuentra nunca:
+«chain-of-thought» está en casi todos los fragmentos de Wei et al., así que no discrimina, y la
+frase con la respuesta dice «∼100B parameters», no «model size». En la fusión, ese fragmento pierde
+el aporte del lado léxico. Como se había previsto, la falla de generación de la pregunta 4 con
+k = 5 sigue igual: el híbrido también responde «540B».</p>
+<p><strong>Las negativas no cambian:</strong> abstención correcta de 1,000 en las dos variantes. BM25 no las
+empeora, aunque «GPT-4» y «Llama» sí aparecen en el corpus.</p>
+<h2>Lectura final</h2>
+<p>Con 8 respondibles, cada pregunta mueve el Hit Rate en 0,125, así que estas diferencias son de
+una o dos preguntas y no alcanzan para decir que el híbrido es mejor en general. Lo que sí se
+puede decir, con evidencia, es que el híbrido <strong>arregla la pregunta que nombra métodos (6)</strong>,
+<strong>no arregla la que nombra autores (5)</strong>, y que <strong>la subida del MRR viene sobre todo de la
+coincidencia léxica en dos preguntas simples</strong>, una de ellas inflada por la propia anotación.
+Para la pregunta 5 haría falta otra cosa, por ejemplo reescribir la consulta para separar las
+dos partes («RAG model of Lewis et al.» y «RAGAS framework») y recuperar para cada una. Eso ya
+no es la Opción B.</p>
+<h1 class="parte">Parte 4 — Reflexión</h1>
+<p>Las cifras salen de los CSV crudos de la Parte 2.b (<code>bge-m3@ollama-local</code>) con
+<code>parte4_cifras.py</code>, que también corre la pregunta global de la 4.2 por el baseline. La salida
+cruda está en <code>salidas/bge-m3@ollama-local/parte4_cifras.txt</code>.</p>
+<h2>4.1 El Hit Rate de 0,70</h2>
+<p>Con la plantilla anterior, el Hit Rate dividía los aciertos entre las 10 preguntas, incluidas las negativas, que no pueden acertar porque no tienen documento fuente. Con mis resultados da <strong>0,700 con k = 3</strong> (7 de 10) y <strong>0,800 con k = 5</strong> (8 de 10), y 0,800 ya es el techo aunque el sistema acertó las 8 respondibles. Ese número mezclaba cuánto recupera el sistema con cuántas negativas trae el golden set. Sin ellas en el denominador queda solo la recuperación: <strong>0,875 y 1,000</strong>, y el MRR con k = 5 pasa de 0,625 a <strong>0,781</strong>. Mi 0,700 coincide con la cifra del enunciado por otra razón: aquí sí hay un fallo real. Para las negativas lo que importa es si el sistema se abstuvo, <strong>2 de 2</strong>, y eso se lee junto con la abstención indebida (0,125), porque abstenerse siempre también da 2 de 2.</p>
+<table>
+<thead>
+<tr>
+<th>k</th>
+<th>Hit Rate antes (÷ 10)</th>
+<th>Hit Rate ahora (÷ 8)</th>
+<th>MRR antes</th>
+<th>MRR ahora</th>
+<th>abstención correcta</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3</td>
+<td>0.700</td>
+<td>0.875</td>
+<td>0.600</td>
+<td>0.750</td>
+<td>2 de 2</td>
+</tr>
+<tr>
+<td>5</td>
+<td>0.800</td>
+<td>1.000</td>
+<td>0.625</td>
+<td>0.781</td>
+<td>2 de 2</td>
+</tr>
+</tbody>
+</table>
+<h2>4.2 Una pregunta global</h2>
+<p>Pregunta global: <em>«What are the main themes that run across all the papers in this corpus, and how do they relate to each other?»</em>. Responderla bien exige leer los 16 papers. El RAG vectorial solo trae los 5 fragmentos más parecidos a la pregunta: 2560 tokens de 387 086, el <strong>0,66 %</strong> del corpus. Corrida en el baseline, 4 de los 5 vecinos fueron del paper de LDA, que habla literalmente de «topics» dentro de un «corpus», y el sistema se abstuvo. Recuperó lo que se parece a la pregunta, no lo que la responde. GraphRAG (Edge et al., 2024) no depende de esa búsqueda. Al indexar, extrae un grafo de entidades, lo divide en comunidades con Leiden y resume cada comunidad. En la consulta trabaja en map-reduce: cada resumen da una respuesta parcial y luego se combinan. Así la respuesta cubre el corpus entero, no cinco fragmentos.</p>
+<p>Lo que devolvió el baseline:</p>
+<pre><code>1. 0.482  blei-2003-lda-0001
+2. 0.471  blei-2003-lda-0031
+3. 0.469  blei-2003-lda-0037
+4. 0.447  brown-2020-gpt3-0153
+5. 0.446  blei-2003-lda-0005
+documentos distintos en el top-5: 2 de 16
+respuesta: El corpus no contiene información suficiente.
+</code></pre></body></html>

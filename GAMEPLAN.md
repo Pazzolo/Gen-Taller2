@@ -14,7 +14,7 @@ Each step gets its own branch, created from `main` after the previous step's pul
 | `step-3-baseline` | Part 1: the baseline RAG | In review |
 | `step-4-evaluation` | Part 2: golden set, metrics, `resultados.csv`, worst cases | In review |
 | `step-5-extension` | Part 3: the extension and its measurement | In review |
-| `step-6-report` | Part 4: reflection and the PDF report | Not started |
+| `step-6-report` | Part 4: reflection and the PDF report | In review |
 
 ## Step 0: Set up (≈30 min)
 
@@ -179,11 +179,11 @@ Choose the extension from what you measured, and write your hypothesis down **be
 
 ### Final checklist
 
-- [ ] `git grep -i "sk-"` comes back empty.
-- [ ] `.env` isn't tracked.
-- [ ] `requirements.txt` has pinned versions.
-- [ ] `golden_set.json` is committed.
-- [ ] `resultados.csv` is committed.
+- [x] No API-key pattern in any tracked file (checked on `step-6-report`).
+- [x] `.env` isn't tracked.
+- [x] `requirements.txt` has pinned versions.
+- [x] `golden_set.json` is committed.
+- [x] `resultados.csv` is committed.
 
 ## Suggested order and time
 

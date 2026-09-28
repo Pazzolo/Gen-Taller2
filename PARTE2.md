@@ -10,7 +10,7 @@ export H200_EMBED_URL=http://localhost:11434 EMBEDDING_BACKEND=h200 OPENAI_API_K
 python verificar_golden.py                    # 2.a: el golden set contra los fragmentos reales
 python evaluation.py --k 3 --sin-indexar      # 2.b (reusa el índice de la Parte 1)
 python evaluation.py --k 5 --sin-indexar
-python tabla_metricas.py                      # tabla desde los CSV + resultados.csv
+python tabla_metricas.py --entregable         # tabla desde los CSV + ./resultados.csv
 python analisis_fallos.py                     # 2.c: evidencia de los peores casos
 ```
 
@@ -179,6 +179,48 @@ La anotación era más estricta que la pregunta. No se corrige ahora, porque cam
 después de ver los resultados sería ajustar el verificador al sistema. Queda como candidata para
 una versión 1.1 del golden set, declarada como tal, y descuenta el 0,125 que separa el Hit Rate@3
 de 1,000.
+
+### Contraprueba: otro generador sobre la misma recuperación
+
+Dos de los tres casos se atribuyeron a la generación, y eso se puede poner a prueba: si el
+diagnóstico es correcto, un generador más capaz sobre **los mismos fragmentos** debería
+arreglarlos. Se repitió la 2.b con `granite3.3` (8,2 B, en el Ollama de la H200), con el mismo
+prompt, temperatura 0 y el índice `bge-m3@h200`. Ese índice da el mismo top-k que el local en
+estas preguntas (Parte 1.3), así que lo único que cambia es el generador. Se eligió `granite3.3`
+porque fue el único generador que cargó en la H200 ese día; `qwen3:32b`, `gemma3:27b` y
+`gpt-oss:120b` hicieron caer el proceso de Ollama del servidor. Salida cruda en
+`salidas/bge-m3@h200/granite3.3/`.
+
+| generador | k | Hit Rate@k | MRR | abstención correcta | abstención indebida |
+|---|---|---|---|---|---|
+| `qwen3:1.7b` | 3 | 0,875 | 0,750 | 1,000 | 0,250 |
+| `granite3.3` | 3 | 0,875 | 0,750 | 1,000 | **0,000** |
+| `qwen3:1.7b` | 5 | 1,000 | 0,781 | 1,000 | 0,125 |
+| `granite3.3` | 5 | 1,000 | 0,781 | 1,000 | **0,000** |
+
+Hit Rate y MRR no se mueven, como se esperaba, porque miden la recuperación. Lo que cambia son
+las respuestas. En el caso 1, `granite3.3` responde la pregunta 6 con los dos k usando lo que está
+en `rafailov-2023-dpo-0003` (modelo de recompensa + PPO contra la pérdida directa de DPO). En el
+caso 3 responde «aproximadamente 100 billion parameters» también con k = 5, sin dejarse arrastrar
+por el 540B. Eso respalda que esos dos casos eran fallas de generación y no de recuperación. La
+Parte 3 llega a lo mismo en la pregunta 6 por el otro lado: el híbrido trae un fragmento que
+nombra InstructGPT y `qwen3:1.7b` deja de abstenerse.
+
+Pero el 0,000 no es todo mejora, y hay que leer las respuestas para verlo. En la pregunta 5 con
+k = 3 (el caso 2) `granite3.3` también responde, y describe el RAG de Lewis et al. con detalle,
+aunque ninguno de los tres fragmentos recuperados es de ese paper. Esa parte sale de lo que el
+modelo ya sabía, no del contexto, o sea que incumple la instrucción del prompt. `qwen3:1.7b` se
+abstenía ahí, y según lo discutido en el caso 2 eso era lo correcto. El generador más grande
+tapa una falla de recuperación en vez de arreglarla, y la métrica lo cuenta como acierto. Algo
+parecido pasa en la negativa 9: `granite3.3` dice la frase de abstención, pero agrega que
+«GPT-4 es un modelo desarrollado por Microsoft», que es falso y no está en el corpus. Como
+`se_abstuvo` solo busca la frase, la cuenta como abstención correcta.
+
+La conclusión honesta es que el generador explica los casos 1 y 3, pero cambiarlo trae su propio
+problema: responde con conocimiento propio cuando el contexto no alcanza. Con 8 respondibles y
+dos modelos que difieren en tamaño **y** en familia, esto no dice cuál de los dos factores pesa
+más. Para medirlo bien haría falta una métrica de fidelidad al contexto, como la de RAGAS
+(Opción D), que no se corrió.
 
 ### Las tres fallas silenciosas de la Parte 0, en este corpus
 
