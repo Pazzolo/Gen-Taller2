@@ -15,3 +15,6 @@ data/
 .DS_Store
 __MACOSX/
 *.zip
+
+# Copia de origen de los papers; el corpus indexable es corpus/
+Papers/

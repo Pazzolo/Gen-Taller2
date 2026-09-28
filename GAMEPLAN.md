@@ -8,8 +8,8 @@ Each step gets its own branch, created from `main` after the previous step's pul
 
 | Branch | Contents | Status |
 |---|---|---|
-| `step-0-setup` | `.gitignore`, scaffold, gameplan, pinned `requirements.txt` | Open, waiting on push (the pin is blocked by disk space) |
-| `step-1-corpus` | `corpus/` plus the page and text-layer check | Not started |
+| `step-0-setup` | `.gitignore`, scaffold, gameplan | Merged (PR #1). The pinned `requirements.txt` moves to Step 3, when everything is installed |
+| `step-1-corpus` | `corpus/` plus the page and text-layer check | In review |
 | `step-2-part0` | Part 0: the three silent failures, scripts and raw output | Not started |
 | `step-3-baseline` | Part 1: the baseline RAG | Not started |
 | `step-4-evaluation` | Part 2: golden set, metrics, `resultados.csv`, worst cases | Not started |
@@ -46,7 +46,9 @@ Each step gets its own branch, created from `main` after the previous step's pul
 | Material for 2.c | Tables and headers | Two columns, equations, references |
 | Reranker for Option C | `rerank_local_multilingue`, no published figures | `rerank_local_ingles`, with published figures |
 
-**Recommendation: B**, unless you already have the USFQ PDFs and they total 50 pages or more. It's lower risk, and the references sections and two-column layouts will give you real failures to analyse.
+**✅ Decided: Option B.** The corpus is the 16 week 1 and week 2 papers from `Papers/`, copied flat into `corpus/` (the ingestion doesn't read subfolders). It's English only, 440 pages, and every page has a text layer. The evidence is `verificar_corpus.py`, whose output is saved in `salidas/corpus_verificacion.txt`. Declare the language as English in the report.
+
+Original recommendation: **B**, unless you already have the USFQ PDFs and they total 50 pages or more. It's lower risk, and the references sections and two-column layouts will give you real failures to analyse.
 
 - If you go with B, write the golden-set questions in English. `fragmento_esperado` has to be literal English text, and Spanish questions would add a cross-lingual effect that muddies 2.c.
 - Once you've chosen, check each PDF's pages and useful characters with `pypdf` before you do anything else.
